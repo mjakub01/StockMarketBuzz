@@ -1,0 +1,5 @@
+{
+  "name": "StockMarketBuzz",
+  "description": "AI-powered stock screener utilizing Ross Cameron's 5-step system to identify high-potential momentum stocks.",
+  "requestFramePermissions": []
+}
