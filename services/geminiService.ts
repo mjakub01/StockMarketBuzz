@@ -1,6 +1,6 @@
 
 import { GoogleGenAI } from "@google/genai";
-import { StockCandidate, ScanResult, SearchSource, MoversResult, MarketMover, OversoldResult, WatchlistItem, StockAnalysisFull, HeatmapResult, NewsFeedResult, InsiderScanResult, ScreenshotAnalysisResult, MarketIndex, EconomicEvent, CryptoCandidate, DailyMarketSummary, GainersLosersResult, ScannerFilters, EarningsFilters, MarketMoversFilters } from "../types";
+import { StockCandidate, ScanResult, SearchSource, MoversResult, MarketMover, OversoldResult, WatchlistItem, StockAnalysisFull, HeatmapResult, NewsFeedResult, InsiderScanResult, ScreenshotAnalysisResult, MarketIndex, EconomicEvent, CryptoCandidate, DailyMarketSummary, GainersLosersResult, ScannerFilters, EarningsFilters, MarketMoversFilters, EarningsCalendarEvent, CalendarDateRange } from "../types";
 import { getActiveKey } from './apiManager';
 
 // Dynamic Key Resolver: Check Settings first, then Env
@@ -257,10 +257,11 @@ export const scanMarket = async (forceRefresh = false, filters?: ScannerFilters)
             5. Projected Daily Volume > 25M.
             6. Catalyst Required (News/Earnings).
             7. Exclude ETFs/Warrants.
+            8. Active Time: 7:00 AM - 11:00 AM ET.
             `;
         } else {
             if (filters.projVolume) filterPrompt += "- Projected EOD Volume > 25M (Extremely high relative volume today)\n";
-            if (filters.morningActive) filterPrompt += "- Strong activity/movement specifically in the 7am - 11am ET window (Morning Gappers)\n";
+            if (filters.morningActive) filterPrompt += "- TIME FILTER (7 AM - 11 AM ET): Identify stocks with high volatility and volume specifically in the pre-market and morning session. \n";
             if (filters.breakout) filterPrompt += "- Price MUST be above Pre-Market Highs or Previous Day Highs (Breakout)\n";
             if (filters.highVolatility) filterPrompt += "- High Intraday Volatility (Range > 5%)\n";
             if (filters.excludeDerivatives) filterPrompt += "- EXCLUDE: ETFs, SPACs, Warrants, Rights, and Buyouts. Common stock only.\n";
@@ -588,6 +589,34 @@ export const fetchEconomicCalendar = async (range: string = 'Today', forceRefres
     } catch (e) { return []; }
 };
 
+export const fetchUpcomingEarnings = async (range: CalendarDateRange = 'Today', forceRefresh = false): Promise<EarningsCalendarEvent[]> => {
+    const key = `earnings_cal_${range}`;
+    if (!forceRefresh) {
+        const cached = getCached<EarningsCalendarEvent[]>(key);
+        if (cached) return cached;
+    }
+    const prompt = `
+      Find major companies reporting earnings ${range}.
+      Use Google Search to find current schedule.
+      STRICT JSON OUTPUT ONLY. 
+      Return: [ { "symbol": "AAPL", "companyName": "Apple", "time": "AMC", "epsEstimate": "$1.20", "date": "Oct 24" }, ... ]
+      For "time", use "BMO" (Before Market Open), "AMC" (After Market Close), or "During".
+    `;
+    try {
+        const response: any = await generateContentWithRetry({
+            model: modelId, contents: prompt, config: { tools: [{ googleSearch: {} }], temperature: 0.1 }
+        });
+        const raw = extractJson(response?.text);
+        let result: EarningsCalendarEvent[] = [];
+        if (Array.isArray(raw)) result = raw;
+        else if (raw && Array.isArray(raw.events)) result = raw.events;
+        else if (raw && Array.isArray(raw.earnings)) result = raw.earnings;
+
+        setCache(key, result);
+        return result;
+    } catch (e) { return []; }
+};
+
 export const fetchTopGainersLosers = async (forceRefresh = false): Promise<GainersLosersResult> => {
     if (!forceRefresh) {
         const cached = getCached<GainersLosersResult>('gainers_losers');
@@ -700,23 +729,28 @@ export const analyzeStockFull = async (symbol: string, forceRefresh = false): Pr
     Analyze stock: ${symbol}. Use real-time data if possible via tools.
     STRICT JSON OUTPUT ONLY.
     CRITICAL: All timestamps (candles, news) must be in the PAST relative to now (${new Date().toLocaleTimeString()}). 
-    Do not generate data for future times (e.g. if it is 10:00 AM, do not show 2:00 PM candles).
+    Do not generate data for future times.
     
-    REQUIRED: Return a JSON object strictly matching this structure (use numbers for prices/values):
+    REQUIRED: Return a JSON object strictly matching this structure:
     {
       "symbol": "${symbol}",
       "companyName": "Company Name",
       "price": 125.50,
       "change": 1.25,
       "changePercent": 1.01,
-      "currency": "USD",
       "candles": [
          { "time": "09:30", "open": 100, "high": 105, "low": 99, "close": 102, "volume": 1000, "rsi": 55, "macd": 0.5, "macdSignal": 0.4, "macdHist": 0.1 },
          ... (30-50 SIMULATED 1-min candles. Include rsi/macd values)
       ],
       "overlays": [
-         { "type": "Support", "label": "Major Support", "yValue": 98.50, "color": "#10B981", "strength": "Major", "testCount": 4, "method": "Volume Node" },
-         { "type": "Resistance", "label": "Key Resistance", "yValue": 108.00, "color": "#EF4444", "strength": "Minor", "testCount": 2, "method": "Swing High" }
+         // DETAILED S/R and PATTERN ANALYSIS
+         // Classify each level clearly. Use "method" field.
+         // Example: 
+         // { "type": "Resistance", "label": "Swing High", "yValue": 108.50, "color": "#EF4444", "strength": "Major", "testCount": 3, "method": "Swing High", "confidenceScore": 87, "lastTested": "Today 10:30 AM", "description": "Rejected 3 times in last 2 days" },
+         // { "type": "Support", "label": "Volume Shelf", "yValue": 98.20, "color": "#10B981", "strength": "Major", "testCount": 5, "method": "Volume Profile", "confidenceScore": 92, "lastTested": "Yesterday", "description": "High volume node acting as floor" },
+         // { "type": "Resistance", "label": "Gap Fill", "yValue": 102.00, "color": "#F59E0B", "strength": "Minor", "testCount": 1, "method": "Gap Fill", "confidenceScore": 60, "lastTested": "Pre-market", "description": "Unfilled gap from previous close" },
+         // Include POC, HVN, LVN as type="Zone" or "Support/Resistance"
+         { "type": "Zone", "label": "POC", "yValue": 101.50, "color": "#06B6D4", "strength": "Major", "testCount": 10, "method": "Volume Profile", "confidenceScore": 95, "lastTested": "Today", "description": "Point of Control - Max Volume" }
       ],
       "fundamentals": { 
          "marketCap": "10.5B", "float": "50M", "peRatio": "22.5", "avgVolume": "1.2M" 
@@ -736,7 +770,6 @@ export const analyzeStockFull = async (symbol: string, forceRefresh = false): Pr
       });
       const parsed = extractJson(response?.text);
       
-      // Safety checks
       const safeData: StockAnalysisFull = {
           symbol: parsed.symbol || symbol,
           companyName: parsed.companyName || symbol,

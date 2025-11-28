@@ -1,30 +1,44 @@
 
 import React, { useState, useEffect } from 'react';
 import { ApiProviderConfig, ApiKeyConfig, ApiProviderId } from '../types';
-import { getApiKeys, saveApiKey, removeApiKey, testApiConnection, SUPPORTED_PROVIDERS } from '../services/apiManager';
+import { getApiKeys, saveApiKey, removeApiKey, testApiConnection, SUPPORTED_PROVIDERS, hasValidExternalProvider, getAIFallbackPreference, setAIFallbackPreference } from '../services/apiManager';
+import { useAuth } from '../contexts/AuthContext';
 
 const ApiConnectionSettings: React.FC = () => {
+  const { user } = useAuth();
   const [configs, setConfigs] = useState<Record<string, ApiKeyConfig>>({});
   const [editingId, setEditingId] = useState<ApiProviderId | null>(null);
   const [inputKey, setInputKey] = useState('');
   const [testingId, setTestingId] = useState<ApiProviderId | null>(null);
+  const [testResult, setTestResult] = useState<{ id: string; success: boolean; message: string; data?: any } | null>(null);
+  
+  // AI Fallback State
+  const [hasExternalKeys, setHasExternalKeys] = useState(false);
+  const [useAIFallback, setUseAIFallback] = useState(false);
 
   useEffect(() => {
-    setConfigs(getApiKeys());
-  }, []);
+    refreshState();
+  }, [user?.id]);
+
+  const refreshState = () => {
+    setConfigs(getApiKeys(user?.id));
+    setHasExternalKeys(hasValidExternalProvider(user?.id));
+    setUseAIFallback(getAIFallbackPreference(user?.id));
+  };
 
   const handleEdit = (providerId: ApiProviderId) => {
     setEditingId(providerId);
     setInputKey(configs[providerId]?.apiKey || '');
+    setTestResult(null);
   };
 
   const handleCancel = () => {
     setEditingId(null);
     setInputKey('');
+    setTestResult(null);
   };
 
   const handleSave = async (providerId: ApiProviderId) => {
-    // Optimistic save
     const newConfig: ApiKeyConfig = {
       providerId,
       apiKey: inputKey,
@@ -33,9 +47,8 @@ const ApiConnectionSettings: React.FC = () => {
       lastTested: undefined
     };
     
-    // Save immediately so UI updates
-    saveApiKey(newConfig);
-    setConfigs(getApiKeys());
+    saveApiKey(newConfig, user?.id);
+    refreshState();
     
     // Auto-test
     handleTest(providerId, inputKey);
@@ -44,34 +57,42 @@ const ApiConnectionSettings: React.FC = () => {
 
   const handleTest = async (providerId: ApiProviderId, keyToTest?: string) => {
     setTestingId(providerId);
+    setTestResult(null);
     const key = keyToTest || configs[providerId]?.apiKey;
     
-    const isValid = await testApiConnection(providerId, key);
+    const result = await testApiConnection(providerId, key);
     
     const updatedConfig: ApiKeyConfig = {
       ...(configs[providerId] || { providerId, apiKey: key, isEnabled: true }),
-      status: isValid ? 'valid' : 'invalid',
+      status: result.success ? 'valid' : 'invalid',
       lastTested: new Date().toISOString()
     };
 
-    saveApiKey(updatedConfig);
-    setConfigs(getApiKeys());
+    saveApiKey(updatedConfig, user?.id);
+    
+    setTestResult({ id: providerId, ...result });
     setTestingId(null);
+    refreshState();
   };
 
   const handleToggle = (providerId: ApiProviderId) => {
     const config = configs[providerId];
     if (!config) return;
     const updated = { ...config, isEnabled: !config.isEnabled };
-    saveApiKey(updated);
-    setConfigs(getApiKeys());
+    saveApiKey(updated, user?.id);
+    refreshState();
   };
 
   const handleDelete = (providerId: ApiProviderId) => {
     if (confirm('Are you sure you want to remove this API key?')) {
-      removeApiKey(providerId);
-      setConfigs(getApiKeys());
+      removeApiKey(providerId, user?.id);
+      refreshState();
     }
+  };
+
+  const toggleAIFallback = () => {
+    setAIFallbackPreference(!useAIFallback, user?.id);
+    refreshState();
   };
 
   return (
@@ -81,12 +102,47 @@ const ApiConnectionSettings: React.FC = () => {
         <p className="text-[var(--text-secondary)] mt-1">Manage connection keys for real-time market data providers.</p>
       </div>
 
+      {/* AI Fallback Warning / Toggle */}
+      {!hasExternalKeys && (
+        <div className="mb-8 bg-yellow-900/10 border border-yellow-500/20 p-6 rounded-xl flex flex-col md:flex-row justify-between items-center gap-4">
+           <div>
+              <h3 className="text-yellow-500 font-bold flex items-center gap-2">
+                 ⚠️ No External Data Feeds Configured
+              </h3>
+              <p className="text-yellow-200/70 text-sm mt-1">
+                 You haven't connected a live market data provider (like Polygon or IEX) yet.
+              </p>
+           </div>
+           
+           <button 
+             onClick={toggleAIFallback}
+             className={`px-5 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition-all shadow-lg
+               ${useAIFallback 
+                 ? 'bg-green-600 text-white hover:bg-green-500 shadow-green-900/20' 
+                 : 'bg-gray-800 text-gray-300 border border-gray-600 hover:bg-gray-700'}
+             `}
+           >
+             {useAIFallback ? (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-white animate-pulse"></span>
+                  AI Data Mode Active
+                </>
+             ) : (
+                <>
+                  <span>🧠</span> Use AI Fallback Data
+                </>
+             )}
+           </button>
+        </div>
+      )}
+
       <div className="grid gap-6">
         {SUPPORTED_PROVIDERS.map((provider) => {
           const config = configs[provider.id];
           const isEditing = editingId === provider.id;
           const isTesting = testingId === provider.id;
           const hasKey = !!config?.apiKey;
+          const currentTest = testResult?.id === provider.id ? testResult : null;
 
           return (
             <div key={provider.id} className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl p-6 shadow-sm transition-all hover:border-[var(--accent-color)]">
@@ -158,8 +214,15 @@ const ApiConnectionSettings: React.FC = () => {
                               <span className="text-[var(--border-color)]">|</span>
                               <button onClick={() => handleDelete(provider.id)} className="text-xs text-red-400 hover:text-red-300">Remove</button>
                            </div>
-                           {config.lastTested && (
-                             <span className="text-[10px] text-[var(--text-secondary)]">Tested: {new Date(config.lastTested).toLocaleTimeString()}</span>
+                           
+                           {/* Test Result Display */}
+                           {currentTest && (
+                              <div className={`mt-2 p-2 rounded text-[10px] w-full border ${currentTest.success ? 'bg-green-900/20 border-green-500/30 text-green-300' : 'bg-red-900/20 border-red-500/30 text-red-300'}`}>
+                                 <strong>{currentTest.success ? 'SUCCESS' : 'FAILED'}:</strong> {currentTest.message}
+                                 {currentTest.data && (
+                                    <pre className="mt-1 opacity-70 overflow-x-hidden">{JSON.stringify(currentTest.data).slice(0, 50)}...</pre>
+                                 )}
+                              </div>
                            )}
                         </div>
                       ) : (

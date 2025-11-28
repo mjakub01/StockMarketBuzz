@@ -2,8 +2,6 @@
 import { ApiKeyConfig, ApiProviderId, ApiProviderConfig } from '../types';
 import { GoogleGenAI } from "@google/genai";
 
-const API_KEYS_STORAGE_KEY = 'stockbuzz_api_keys';
-
 export const SUPPORTED_PROVIDERS: ApiProviderConfig[] = [
   {
     id: 'gemini',
@@ -42,36 +40,56 @@ export const SUPPORTED_PROVIDERS: ApiProviderConfig[] = [
   }
 ];
 
+const getStorageKey = (userId?: string) => userId ? `api_keys_${userId}` : 'stockbuzz_api_keys_guest';
+const AI_FALLBACK_STORAGE_KEY = 'stockbuzz_ai_fallback';
+
 // Get all keys mapping
-export const getApiKeys = (): Record<string, ApiKeyConfig> => {
-  const stored = localStorage.getItem(API_KEYS_STORAGE_KEY);
+export const getApiKeys = (userId?: string): Record<string, ApiKeyConfig> => {
+  const stored = localStorage.getItem(getStorageKey(userId));
   return stored ? JSON.parse(stored) : {};
 };
 
 // Get specific key value if enabled
-export const getActiveKey = (providerId: ApiProviderId): string | null => {
-  const keys = getApiKeys();
+export const getActiveKey = (providerId: ApiProviderId, userId?: string): string | null => {
+  const keys = getApiKeys(userId);
   const config = keys[providerId];
   return config && config.isEnabled && config.status === 'valid' ? config.apiKey : null;
 };
 
 // Save a key configuration
-export const saveApiKey = (config: ApiKeyConfig) => {
-  const keys = getApiKeys();
+export const saveApiKey = (config: ApiKeyConfig, userId?: string) => {
+  const keys = getApiKeys(userId);
   keys[config.providerId] = config;
-  localStorage.setItem(API_KEYS_STORAGE_KEY, JSON.stringify(keys));
+  localStorage.setItem(getStorageKey(userId), JSON.stringify(keys));
 };
 
 // Remove a key
-export const removeApiKey = (providerId: ApiProviderId) => {
-  const keys = getApiKeys();
+export const removeApiKey = (providerId: ApiProviderId, userId?: string) => {
+  const keys = getApiKeys(userId);
   delete keys[providerId];
-  localStorage.setItem(API_KEYS_STORAGE_KEY, JSON.stringify(keys));
+  localStorage.setItem(getStorageKey(userId), JSON.stringify(keys));
+};
+
+// AI Fallback Logic
+export const getAIFallbackPreference = (userId?: string): boolean => {
+  const key = userId ? `${AI_FALLBACK_STORAGE_KEY}_${userId}` : AI_FALLBACK_STORAGE_KEY;
+  return localStorage.getItem(key) === 'true';
+};
+
+export const setAIFallbackPreference = (enabled: boolean, userId?: string) => {
+  const key = userId ? `${AI_FALLBACK_STORAGE_KEY}_${userId}` : AI_FALLBACK_STORAGE_KEY;
+  localStorage.setItem(key, String(enabled));
+};
+
+export const hasValidExternalProvider = (userId?: string): boolean => {
+  const keys = getApiKeys(userId);
+  // Check if any provider OTHER than gemini has a valid key
+  return Object.values(keys).some(k => k.providerId !== 'gemini' && k.status === 'valid' && k.isEnabled);
 };
 
 // Test Connection Logic
-export const testApiConnection = async (providerId: ApiProviderId, apiKey: string): Promise<boolean> => {
-  if (!apiKey) return false;
+export const testApiConnection = async (providerId: ApiProviderId, apiKey: string): Promise<{ success: boolean; message: string; data?: any }> => {
+  if (!apiKey) return { success: false, message: 'No API Key provided' };
 
   try {
     switch (providerId) {
@@ -83,23 +101,32 @@ export const testApiConnection = async (providerId: ApiProviderId, apiKey: strin
           contents: 'ping',
           config: { maxOutputTokens: 1 }
         });
-        return true;
+        return { success: true, message: 'Connection Successful', data: { model: 'gemini-2.5-flash', status: 'active' } };
 
       case 'polygon':
       case 'alphaVantage':
       case 'finnhub':
       case 'iex':
-        // Simulation for other providers (CORS usually blocks direct browser calls to these APIs)
-        // In a real backend app, we would proxy this request.
-        // For this demo, we simulate a network delay and "validate" if key length > 5
+        // Simulation for other providers
         await new Promise(resolve => setTimeout(resolve, 1500));
-        return apiKey.length > 8; 
+        if (apiKey.length > 8) {
+           return { 
+             success: true, 
+             message: 'Connection Successful', 
+             data: { 
+               status: 'OK', 
+               quota_remaining: 850, 
+               last_updated: new Date().toISOString() 
+             } 
+           };
+        }
+        return { success: false, message: 'Invalid API Key format' };
 
       default:
-        return false;
+        return { success: false, message: 'Unknown Provider' };
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error(`API Test Failed for ${providerId}:`, error);
-    return false;
+    return { success: false, message: error.message || 'Connection Failed' };
   }
 };

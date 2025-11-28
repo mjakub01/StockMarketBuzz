@@ -3,6 +3,8 @@ import React, { useMemo, useState } from 'react';
 import { useStockAnalysis } from '../contexts/StockAnalysisContext';
 import { StockAnalysisFull, ChartOverlay } from '../types';
 import { useDraggableLayout } from '../hooks/useDraggableLayout';
+import { useAuth } from '../contexts/AuthContext';
+import SmartChart from './SmartChart';
 
 // --- SUB-COMPONENTS (With Drag Handles) ---
 
@@ -153,7 +155,7 @@ const TechnicalHealthCard = React.memo(({ technicals }: { technicals: any }) => 
 });
 
 const SRLevelsPanel = React.memo(({ overlays }: { overlays: ChartOverlay[] }) => {
-  const levels = overlays.filter(o => o.type === 'Support' || o.type === 'Resistance');
+  const levels = overlays.filter(o => o.type === 'Support' || o.type === 'Resistance' || o.type === 'Zone');
   
   if (levels.length === 0) return (
      <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 shadow-lg h-full group">
@@ -167,12 +169,16 @@ const SRLevelsPanel = React.memo(({ overlays }: { overlays: ChartOverlay[] }) =>
 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 shadow-lg h-full group hover:border-gray-700 transition-colors">
-       <div className="flex items-center mb-4">
-          <DragHandle />
-          <h3 className="font-bold text-white flex items-center gap-2">
-             <span className="text-blue-400">🎯</span> Support & Resistance Zones
-          </h3>
+       <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center">
+             <DragHandle />
+             <h3 className="font-bold text-white flex items-center gap-2">
+                <span className="text-blue-400">🎯</span> Support & Resistance Analysis
+             </h3>
+          </div>
+          <span className="text-xs text-gray-500 font-mono">{levels.length} Levels Found</span>
        </div>
+       
        <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
              <thead className="text-xs text-gray-500 uppercase font-bold border-b border-gray-800">
@@ -180,35 +186,57 @@ const SRLevelsPanel = React.memo(({ overlays }: { overlays: ChartOverlay[] }) =>
                    <th className="pb-3 pl-2">Price Level</th>
                    <th className="pb-3">Type</th>
                    <th className="pb-3">Confidence</th>
-                   <th className="pb-3 text-right pr-2">Logic</th>
+                   <th className="pb-3">Tested</th>
+                   <th className="pb-3 text-right pr-2">Method</th>
                 </tr>
              </thead>
              <tbody className="divide-y divide-gray-800">
                 {levels.map((lvl, i) => (
                    <tr key={i} className="hover:bg-gray-800/50 transition-colors">
-                      <td className="py-3 pl-2 font-mono font-bold text-white text-lg">${lvl.yValue?.toFixed(2)}</td>
+                      <td className="py-3 pl-2 font-mono font-bold text-white text-base">
+                         ${lvl.yValue?.toFixed(2)}
+                         <div className="text-[10px] text-gray-500 font-normal mt-0.5">{lvl.label}</div>
+                      </td>
                       <td className="py-3">
-                         <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${lvl.type === 'Support' ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
+                         <span className={`px-2 py-1 rounded text-xs font-bold uppercase border ${lvl.type === 'Support' ? 'bg-green-500/10 text-green-400 border-green-500/20' : lvl.type === 'Resistance' ? 'bg-red-500/10 text-red-400 border-red-500/20' : 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20'}`}>
                             {lvl.type}
                          </span>
                       </td>
                       <td className="py-3">
-                         <div className="flex items-center gap-2">
-                            <div className="flex gap-0.5">
-                               {[...Array(lvl.strength === 'Major' ? 3 : 1)].map((_, idx) => (
-                                  <div key={idx} className={`w-1.5 h-3 rounded-sm ${lvl.type === 'Support' ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                               ))}
+                         <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2">
+                                <span className={`text-xs font-bold ${lvl.confidenceScore && lvl.confidenceScore > 80 ? 'text-green-400' : 'text-gray-400'}`}>
+                                   {lvl.confidenceScore || 50}%
+                                </span>
+                                <div className="w-16 h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                                   <div className={`h-full rounded-full ${lvl.strength === 'Major' ? 'bg-blue-500' : 'bg-gray-600'}`} style={{ width: `${lvl.confidenceScore || 50}%` }}></div>
+                                </div>
                             </div>
-                            <span className="text-xs text-gray-400">{lvl.testCount ? `${lvl.testCount}x` : 'Active'}</span>
+                            <span className="text-[10px] text-gray-500 uppercase">{lvl.strength || 'Minor'}</span>
                          </div>
                       </td>
-                      <td className="py-3 text-right pr-2 text-gray-500 text-xs font-medium">
-                         {lvl.method || 'Pivot'}
+                      <td className="py-3">
+                         <div className="text-xs text-gray-300">
+                            {lvl.testCount ? `${lvl.testCount} Touches` : 'Untested'}
+                         </div>
+                         <div className="text-[10px] text-gray-500">{lvl.lastTested || 'Unknown'}</div>
+                      </td>
+                      <td className="py-3 text-right pr-2">
+                         <span className="text-gray-400 text-xs font-medium px-2 py-0.5 bg-gray-800 rounded border border-gray-700/50">
+                            {lvl.method || 'Pivot'}
+                         </span>
                       </td>
                    </tr>
                 ))}
              </tbody>
           </table>
+       </div>
+       
+       <div className="mt-4 pt-3 border-t border-gray-800 text-xs text-gray-500 italic flex items-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-blue-500" viewBox="0 0 20 20" fill="currentColor">
+             <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+          </svg>
+          Highest confidence levels are derived from multi-touch pivots and volume nodes.
        </div>
     </div>
   );
@@ -256,9 +284,9 @@ const AnalystSummaryPanel = React.memo(({ summary }: { summary: string }) => (
 
 // --- MAIN COMPONENT ---
 
-type WidgetId = 'price' | 'volume' | 'technicals' | 'sr' | 'news' | 'summary';
+type WidgetId = 'chart' | 'price' | 'volume' | 'technicals' | 'sr' | 'news' | 'summary';
 
-const defaultLayout: WidgetId[] = ['price', 'volume', 'technicals', 'sr', 'news', 'summary'];
+const defaultLayout: WidgetId[] = ['chart', 'price', 'volume', 'technicals', 'sr', 'news', 'summary'];
 
 interface StockDetailViewProps {
   ticker: string | null;
@@ -266,8 +294,11 @@ interface StockDetailViewProps {
 }
 
 const StockDetailView: React.FC<StockDetailViewProps> = ({ ticker, isEmbedded = false }) => {
+  const { user } = useAuth();
   const { analysisData: data, isLoading: loading, loadStock, lastUpdated } = useStockAnalysis();
-  const { layout, moveItem, resetLayout, setIsDragging } = useDraggableLayout<WidgetId>(`stock_view_layout_${ticker || 'default'}`, defaultLayout);
+  
+  const layoutKey = `stock_view_layout_${user?.id}_${ticker || 'default'}`;
+  const { layout, moveItem, resetLayout, setIsDragging } = useDraggableLayout<WidgetId>(layoutKey, defaultLayout);
   const [draggedId, setDraggedId] = useState<WidgetId | null>(null);
 
   if (!ticker) return <div className="text-center py-10 text-gray-500">Select a stock to begin analysis</div>;
@@ -280,12 +311,11 @@ const StockDetailView: React.FC<StockDetailViewProps> = ({ ticker, isEmbedded = 
     setDraggedId(id);
     setIsDragging(true);
     e.dataTransfer.effectAllowed = "move";
-    // Must set text/plain to allow dropping in some browsers
     e.dataTransfer.setData("text/plain", index.toString());
   };
 
   const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault(); // Necessary to allow dropping
+    e.preventDefault();
   };
 
   const handleDrop = (e: React.DragEvent, targetIndex: number) => {
@@ -316,9 +346,9 @@ const StockDetailView: React.FC<StockDetailViewProps> = ({ ticker, isEmbedded = 
   const overlays = data.overlays || [];
   const candles = data.candles || [];
 
-  // Component Mapping
   const renderWidget = (id: WidgetId) => {
     switch(id) {
+      case 'chart': return <SmartChart candles={candles} overlays={overlays} height={400} />;
       case 'price': return <PriceActionCard candles={candles} currentPrice={data.price} />;
       case 'volume': return <VolumeLiquidityCard fundamentals={fundamentals} />;
       case 'technicals': return <TechnicalHealthCard technicals={technicals} />;
@@ -329,13 +359,13 @@ const StockDetailView: React.FC<StockDetailViewProps> = ({ ticker, isEmbedded = 
     }
   };
 
-  // Grid Span Mapping (Responsive sizing)
   const getWidgetClass = (id: WidgetId) => {
     switch(id) {
-      case 'sr': return 'col-span-1 lg:col-span-2'; // S/R takes 2 cols on large
+      case 'chart': return 'col-span-1 md:col-span-2 lg:col-span-3 min-h-[450px]';
+      case 'sr': return 'col-span-1 lg:col-span-2';
       case 'news': return 'col-span-1 lg:col-span-1';
-      case 'summary': return 'col-span-1 md:col-span-2 lg:col-span-3'; // Summary takes full width
-      default: return 'col-span-1'; // Cards take 1 col
+      case 'summary': return 'col-span-1 md:col-span-2 lg:col-span-3';
+      default: return 'col-span-1';
     }
   };
 
@@ -343,7 +373,6 @@ const StockDetailView: React.FC<StockDetailViewProps> = ({ ticker, isEmbedded = 
     <div className="animate-fade-in w-full max-w-7xl mx-auto space-y-6">
       <DetailHeader data={data} onRefresh={handleRefresh} lastUpdated={lastUpdated} onResetLayout={resetLayout} />
       
-      {/* Draggable Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
          {layout.map((id, index) => (
             <div 

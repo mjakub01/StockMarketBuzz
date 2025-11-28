@@ -183,14 +183,17 @@ export interface OHLC {
 }
 
 export interface ChartOverlay {
-  type: 'SMA' | 'EMA' | 'Support' | 'Resistance' | 'Pattern' | 'Breakout' | 'Breakdown';
+  type: 'SMA' | 'EMA' | 'Support' | 'Resistance' | 'Pattern' | 'Breakout' | 'Breakdown' | 'Zone';
   label: string;
   color: string;
   points?: { index: number; price: number }[]; // For lines/patterns
   yValue?: number; // For horizontal levels
   strength?: 'Major' | 'Minor';
   testCount?: number;
-  method?: string; // e.g. "Volume Node", "Swing High"
+  method?: string; // "Swing High", "Volume Profile", "Gap Fill", "Psychological", "Fibonacci"
+  confidenceScore?: number; // 0-100
+  lastTested?: string;
+  description?: string;
 }
 
 export interface StockAnalysisFull {
@@ -266,6 +269,14 @@ export interface EconomicEvent {
   category?: string;
   description?: string;
   relatedAssets?: string[];
+}
+
+export interface EarningsCalendarEvent {
+  symbol: string;
+  companyName: string;
+  time: 'BMO' | 'AMC' | 'During';
+  epsEstimate: string;
+  date: string;
 }
 
 export type CalendarDateRange = 'Yesterday' | 'Today' | 'Tomorrow' | 'This Week' | 'Next Week';

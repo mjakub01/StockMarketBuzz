@@ -128,7 +128,7 @@ const ScreenshotImporter: React.FC<ScreenshotImporterProps> = ({ onImport, onCan
                           <div className="flex items-center justify-between mb-3">
                              <h3 className="font-bold text-white">Found Tickers ({selectedTickers.length})</h3>
                              <button 
-                               onClick={() => setSelectedTickers(result.foundTickers)}
+                               onClick={() => result?.foundTickers && setSelectedTickers(result.foundTickers)}
                                className="text-xs text-blue-400 hover:text-blue-300"
                              >
                                Select All
@@ -136,7 +136,7 @@ const ScreenshotImporter: React.FC<ScreenshotImporterProps> = ({ onImport, onCan
                           </div>
                           
                           <div className="flex flex-wrap gap-2 mb-4">
-                             {result.foundTickers.map(ticker => (
+                             {result?.foundTickers?.map(ticker => (
                                 <button
                                   key={ticker}
                                   onClick={() => toggleTicker(ticker)}

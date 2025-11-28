@@ -4,17 +4,26 @@ import { User } from '../types';
 const USERS_KEY = 'stockbuzz_users';
 const CURRENT_USER_KEY = 'stockbuzz_current_user';
 
+// --- HELPER: HASH PASSWORD ---
+const hashPassword = async (password: string): Promise<string> => {
+  const msgBuffer = new TextEncoder().encode(password);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+};
+
 // --- INIT ADMIN USER ---
-const initAdmin = () => {
+const initAdmin = async () => {
   const usersStr = localStorage.getItem(USERS_KEY);
   let users: any[] = usersStr ? JSON.parse(usersStr) : [];
   
   if (!users.find(u => u.email === 'admin@stockbuzz.com')) {
+    const hashedPass = await hashPassword('admin123');
     const adminUser = {
       id: 'admin_1',
       name: 'Admin',
       email: 'admin@stockbuzz.com',
-      password: 'admin123', // In a real app, hash this!
+      password: hashedPass, 
       role: 'admin',
       createdAt: new Date().toISOString()
     };
@@ -23,49 +32,52 @@ const initAdmin = () => {
   }
 };
 
-initAdmin();
+// Initialize admin on load (async IIFE)
+(async () => { await initAdmin(); })();
 
 export const loginUser = async (email: string, password: string): Promise<User> => {
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 500));
+  // Simulate network delay
+  await new Promise(resolve => setTimeout(resolve, 800));
 
   const users = JSON.parse(localStorage.getItem(USERS_KEY) || '[]');
-  const user = users.find((u: any) => u.email === email && u.password === password);
+  const hashedInput = await hashPassword(password);
+  
+  const user = users.find((u: any) => u.email.toLowerCase() === email.toLowerCase() && u.password === hashedInput);
 
   if (!user) {
     throw new Error('Invalid email or password');
   }
 
   const { password: _, ...safeUser } = user;
+  // Create session
   localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(safeUser));
   return safeUser as User;
 };
 
-export const registerUser = async (name: string, email: string, password: string): Promise<User> => {
-  await new Promise(resolve => setTimeout(resolve, 500));
+export const registerUser = async (name: string, email: string, password: string): Promise<void> => {
+  await new Promise(resolve => setTimeout(resolve, 800));
 
   const users = JSON.parse(localStorage.getItem(USERS_KEY) || '[]');
   
-  if (users.find((u: any) => u.email === email)) {
+  if (users.find((u: any) => u.email.toLowerCase() === email.toLowerCase())) {
     throw new Error('Email already registered');
   }
+
+  const hashedPass = await hashPassword(password);
 
   const newUser = {
     id: Date.now().toString(),
     name,
-    email,
-    password, 
+    email: email.toLowerCase(),
+    password: hashedPass, 
     role: 'user',
     createdAt: new Date().toISOString()
   };
 
   users.push(newUser);
   localStorage.setItem(USERS_KEY, JSON.stringify(users));
-
-  const { password: _, ...safeUser } = newUser;
-  localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(safeUser));
   
-  return safeUser as User;
+  // NOTE: We do NOT auto-login here. User must log in explicitly.
 };
 
 export const logoutUser = () => {

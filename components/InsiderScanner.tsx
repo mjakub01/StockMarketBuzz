@@ -45,7 +45,7 @@ const InsiderScanner: React.FC = () => {
   };
 
   const getSentimentColor = (sentiment: string) => {
-    switch (sentiment.toLowerCase()) {
+    switch (sentiment?.toLowerCase()) {
       case 'bullish': return 'text-green-400 bg-green-900/20 border-green-500/30';
       case 'bearish': return 'text-red-400 bg-red-900/20 border-red-500/30';
       default: return 'text-gray-400 bg-gray-800 border-gray-700';
@@ -53,7 +53,7 @@ const InsiderScanner: React.FC = () => {
   };
 
   const getTransactionColor = (type: string) => {
-    return type.toLowerCase() === 'buy' ? 'text-green-400' : 'text-red-400';
+    return type?.toLowerCase() === 'buy' ? 'text-green-400' : 'text-red-400';
   };
 
   return (
@@ -171,24 +171,32 @@ const InsiderScanner: React.FC = () => {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-800">
-                                    {stock.transactions.map((tx, tIdx) => (
-                                        <tr key={tIdx} className="hover:bg-gray-800/50 transition-colors">
-                                            <td className="py-4">
-                                                <div className="font-bold text-white">{tx.insiderName}</div>
-                                                <div className="text-xs text-gray-500">{tx.role}</div>
-                                            </td>
-                                            <td className={`py-4 font-bold ${getTransactionColor(tx.transactionType)}`}>
-                                                {tx.transactionType}
-                                            </td>
-                                            <td className="py-4 text-right font-mono text-gray-300">{tx.amount}</td>
-                                            <td className="py-4 text-right font-mono text-gray-400">{tx.shares}</td>
-                                            <td className="py-4 text-right font-mono text-gray-300">{tx.price}</td>
-                                            <td className="py-4 text-right text-gray-500">{tx.date}</td>
-                                            <td className="py-4 pl-6 text-gray-400 italic text-xs max-w-xs leading-relaxed">
-                                                {tx.interpretation}
+                                    {stock.transactions && stock.transactions.length > 0 ? (
+                                        stock.transactions.map((tx, tIdx) => (
+                                            <tr key={tIdx} className="hover:bg-gray-800/50 transition-colors">
+                                                <td className="py-4">
+                                                    <div className="font-bold text-white">{tx.insiderName}</div>
+                                                    <div className="text-xs text-gray-500">{tx.role}</div>
+                                                </td>
+                                                <td className={`py-4 font-bold ${getTransactionColor(tx.transactionType)}`}>
+                                                    {tx.transactionType}
+                                                </td>
+                                                <td className="py-4 text-right font-mono text-gray-300">{tx.amount}</td>
+                                                <td className="py-4 text-right font-mono text-gray-400">{tx.shares}</td>
+                                                <td className="py-4 text-right font-mono text-gray-300">{tx.price}</td>
+                                                <td className="py-4 text-right text-gray-500">{tx.date}</td>
+                                                <td className="py-4 pl-6 text-gray-400 italic text-xs max-w-xs leading-relaxed">
+                                                    {tx.interpretation}
+                                                </td>
+                                            </tr>
+                                        ))
+                                    ) : (
+                                        <tr>
+                                            <td colSpan={7} className="py-4 text-center text-gray-500 italic">
+                                                No specific transaction details available.
                                             </td>
                                         </tr>
-                                    ))}
+                                    )}
                                 </tbody>
                             </table>
                         </div>

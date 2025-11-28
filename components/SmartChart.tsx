@@ -1,3 +1,4 @@
+
 import React, { useMemo } from 'react';
 import { OHLC, ChartOverlay } from '../types';
 
@@ -85,7 +86,7 @@ const SmartChart: React.FC<SmartChartProps> = React.memo(({ candles = [], overla
 
 
   return (
-    <div className="w-full overflow-hidden bg-gray-900 rounded-xl border border-gray-800 relative select-none">
+    <div className="w-full overflow-hidden bg-gray-900 rounded-xl border border-gray-800 relative select-none group">
       
       {/* Legend */}
       <div className="absolute top-3 left-3 flex flex-wrap gap-2 pointer-events-none z-10 opacity-70">
@@ -93,7 +94,7 @@ const SmartChart: React.FC<SmartChartProps> = React.memo(({ candles = [], overla
              <span className="w-2.5 h-2.5 rounded-full bg-purple-500"></span>
              <span className="text-[10px] text-purple-200 font-bold">VWAP</span>
          </div>
-         {overlays.map((ov, i) => (
+         {overlays.filter(o => o.type !== 'Pattern').map((ov, i) => (
              <div key={i} className="flex items-center gap-1.5 bg-gray-900/80 px-2 py-1 rounded border border-gray-700 backdrop-blur-sm">
                  <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: ov.color || '#FBBF24' }}></span>
                  <span className="text-[10px] text-gray-300 font-bold">{ov.label}</span>
@@ -130,20 +131,56 @@ const SmartChart: React.FC<SmartChartProps> = React.memo(({ candles = [], overla
           );
         })}
 
-        {/* Overlays (S/R) */}
+        {/* Overlays (S/R and Zones) */}
         {overlays.map((ov, i) => {
+           // Horizontal Levels (Resistance/Support/Zones)
            if (ov.yValue !== undefined) {
                const y = getY(ov.yValue);
+               const isMajor = ov.strength === 'Major';
+               const opacity = ov.confidenceScore ? ov.confidenceScore / 100 : (isMajor ? 0.9 : 0.6);
+               const strokeWidth = isMajor ? 2 : 1;
+               const dashArray = isMajor ? "" : "5,3";
+
+               // For Zones (HVN, Zones), render a shaded area if needed, simplified here as thick line
+               const isZone = ov.type === 'Zone' || ov.label.includes('HVN');
+               
                return (
-                   <g key={`ov-${i}`}>
-                       <line x1={padding.left} y1={y} x2={width - padding.right} y2={y} stroke={ov.color || '#FBBF24'} strokeWidth={ov.strength === 'Major' ? 2 : 1} strokeDasharray="5,3" opacity="0.8" />
+                   <g key={`ov-${i}`} className="group/line">
+                       {/* Transparent hit area for hover */}
+                       <rect x={padding.left} y={y - 5} width={width - padding.left - padding.right} height={10} fill="transparent" />
+                       
+                       {isZone ? (
+                          <rect x={padding.left} y={y-4} width={width - padding.left - padding.right} height={8} fill={ov.color} fillOpacity="0.15" />
+                       ) : null}
+
+                       <line 
+                         x1={padding.left} 
+                         y1={y} 
+                         x2={width - padding.right} 
+                         y2={y} 
+                         stroke={ov.color || '#FBBF24'} 
+                         strokeWidth={strokeWidth} 
+                         strokeDasharray={dashArray} 
+                         opacity={opacity} 
+                       />
+                       
+                       {/* Label on Axis */}
                        <text x={width - 55} y={y - 4} fill={ov.color} fontSize="9" fontWeight="bold">{ov.label}</text>
+                       
+                       {/* Tooltip on Hover via SVG title */}
+                       <title>{`${ov.type}: $${ov.yValue}\n${ov.strength || 'Normal'} Strength (${ov.confidenceScore}%)\nMethod: ${ov.method || 'Unknown'}\nTouches: ${ov.testCount || 0}\n${ov.description || ''}`}</title>
                    </g>
                );
            }
+           // Polyline Overlays (Patterns, Trendlines)
            if (ov.points) {
                const pointsStr = ov.points.map(p => `${getX(p.index)},${getY(p.price)}`).join(" ");
-               return <polyline key={`ov-${i}`} points={pointsStr} fill="none" stroke={ov.color} strokeWidth="2" />;
+               return (
+                 <g key={`ov-${i}`}>
+                   <polyline points={pointsStr} fill="none" stroke={ov.color} strokeWidth="2" />
+                   <title>{`${ov.label}\n${ov.description || ''}`}</title>
+                 </g>
+               );
            }
            return null;
         })}

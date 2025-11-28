@@ -1,7 +1,7 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User } from '../types';
-import { loginUser, logoutUser, registerUser } from '../services/authService';
+import { loginUser, logoutUser, registerUser, getCurrentUser } from '../services/authService';
 
 interface AuthContextType {
   user: User | null;
@@ -10,6 +10,7 @@ interface AuthContextType {
   login: (e: string, p: string) => Promise<void>;
   register: (n: string, e: string, p: string) => Promise<void>;
   logout: () => void;
+  isLoading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -22,43 +23,42 @@ export const useAuth = () => {
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  // Default loading to true, but we resolve it immediately in effect
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // BYPASS LOGIN: Automatically set a guest user
-    setUser({
-      id: 'guest_user',
-      name: 'Guest Trader',
-      email: 'guest@stockbuzz.com',
-      role: 'user',
-      createdAt: new Date().toISOString()
-    });
+    // Check for existing session on mount
+    const savedUser = getCurrentUser();
+    if (savedUser) {
+      setUser(savedUser);
+    }
     setLoading(false);
   }, []);
 
   const login = async (email: string, pass: string) => {
-    // No-op for now
+    const data = await loginUser(email, pass);
+    setUser(data);
   };
 
   const register = async (name: string, email: string, pass: string) => {
-    // No-op for now
+    // Registration only creates the user in DB. 
+    // It does NOT set the user state (no auto-login).
+    await registerUser(name, email, pass);
   };
 
   const logout = () => {
-    // No-op for now
+    logoutUser();
+    setUser(null);
   };
-
-  if (loading) return null;
 
   return (
     <AuthContext.Provider value={{ 
       user, 
-      isAuthenticated: true, // Always true
-      isAdmin: false, // Default to false
+      isAuthenticated: !!user, 
+      isAdmin: user?.role === 'admin',
       login, 
       register, 
-      logout 
+      logout,
+      isLoading: loading
     }}>
       {children}
     </AuthContext.Provider>

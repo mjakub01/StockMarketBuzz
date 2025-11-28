@@ -4,8 +4,9 @@ import HeatmapScanner from './HeatmapScanner';
 import MarketMoversScanner from './MarketMoversScanner';
 import NewsFeed from './NewsFeed';
 import StockCard from './StockCard';
+import EarningsCalendarTable from './EarningsCalendarTable';
 import { fetchMarketIndices, fetchEconomicCalendar, fetchTopGainersLosers, fetchDailyMarketSummary } from '../services/geminiService';
-import { MarketIndex, EconomicEvent, GainersLosersResult, DailyMarketSummary } from '../types';
+import { MarketIndex, EconomicEvent, GainersLosersResult, DailyMarketSummary, CalendarDateRange } from '../types';
 import { useSystem } from '../contexts/SystemContext';
 
 interface MarketOverviewProps {}
@@ -207,55 +208,73 @@ const MarketOverview: React.FC<MarketOverviewProps> = () => {
   const CalendarView = () => {
     const [events, setEvents] = useState<EconomicEvent[]>([]);
     const [loading, setLoading] = useState(true);
+    const [activeFilter, setActiveFilter] = useState<CalendarDateRange>('Today');
 
-    const loadData = () => fetchEconomicCalendar().then(setEvents).finally(() => setLoading(false));
+    const loadData = () => {
+        setLoading(true);
+        fetchEconomicCalendar(activeFilter).then(setEvents).finally(() => setLoading(false));
+    };
 
-    useEffect(() => { loadData(); }, []);
+    useEffect(() => { loadData(); }, [activeFilter]);
 
-    if (loading) return (
-       <div className="flex flex-col items-center justify-center h-64 text-gray-400">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-500 mb-4"></div>
-          <p className="animate-pulse font-mono text-sm tracking-wider">FETCHING MACRO DATA...</p>
-       </div>
-    );
+    const filters: CalendarDateRange[] = ['Yesterday', 'Today', 'Tomorrow', 'This Week'];
 
     return (
       <div className="bg-gray-900 border border-white/10 rounded-3xl overflow-hidden shadow-2xl animate-fade-in-up">
-        <div className="p-8 border-b border-white/10 bg-gray-900/50 flex justify-between items-end">
+        <div className="p-8 border-b border-white/10 bg-gray-900/50 flex flex-col md:flex-row justify-between md:items-end gap-6">
            <div>
                <h2 className="text-3xl font-bold text-white tracking-tight">Economic Calendar</h2>
                <p className="text-gray-400 text-sm mt-1">Key macro events affecting volatility.</p>
            </div>
-           <div className="text-4xl opacity-20">📅</div>
+           
+           <div className="flex gap-2 bg-gray-800/50 p-1 rounded-xl">
+              {filters.map(f => (
+                 <button
+                   key={f}
+                   onClick={() => setActiveFilter(f)}
+                   className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeFilter === f ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
+                 >
+                   {f}
+                 </button>
+              ))}
+           </div>
         </div>
-        <div className="overflow-x-auto">
-           <table className="w-full text-left">
-              <thead className="bg-gray-800/50 text-gray-500 text-xs uppercase font-bold tracking-widest">
-                 <tr>
-                    <th className="p-6">Time</th>
-                    <th className="p-6">Event</th>
-                    <th className="p-6">Impact</th>
-                    <th className="p-6 text-right">Actual</th>
-                    <th className="p-6 text-right">Forecast</th>
-                 </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-800">
-                 {events?.map((evt, i) => (
-                    <tr key={i} className="hover:bg-white/5 transition-colors group">
-                       <td className="p-6 text-white font-mono text-sm group-hover:text-blue-300 transition-colors">{evt.time}</td>
-                       <td className="p-6 text-gray-200 font-medium">{evt.event}</td>
-                       <td className="p-6">
-                          <span className={`px-3 py-1 rounded text-[10px] font-bold uppercase tracking-wider border ${evt.impact === 'High' ? 'bg-red-500/10 text-red-400 border-red-500/20' : evt.impact === 'Medium' ? 'bg-orange-500/10 text-orange-400 border-orange-500/20' : 'bg-blue-500/10 text-blue-400 border-blue-500/20'}`}>
-                             {evt.impact}
-                          </span>
-                       </td>
-                       <td className="p-6 text-right text-white font-mono font-bold tracking-tight">{evt.actual || '-'}</td>
-                       <td className="p-6 text-right text-gray-500 font-mono text-sm">{evt.forecast || '-'}</td>
+
+        {loading ? (
+            <div className="flex flex-col items-center justify-center h-64 text-gray-400">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-500 mb-4"></div>
+                <p className="animate-pulse font-mono text-sm tracking-wider">FETCHING MACRO DATA...</p>
+            </div>
+        ) : (
+            <div className="overflow-x-auto">
+            <table className="w-full text-left">
+                <thead className="bg-gray-800/50 text-gray-500 text-xs uppercase font-bold tracking-widest">
+                    <tr>
+                        <th className="p-6">Time</th>
+                        <th className="p-6">Event</th>
+                        <th className="p-6">Impact</th>
+                        <th className="p-6 text-right">Actual</th>
+                        <th className="p-6 text-right">Forecast</th>
                     </tr>
-                 ))}
-              </tbody>
-           </table>
-        </div>
+                </thead>
+                <tbody className="divide-y divide-gray-800">
+                    {events?.map((evt, i) => (
+                        <tr key={i} className="hover:bg-white/5 transition-colors group">
+                        <td className="p-6 text-white font-mono text-sm group-hover:text-blue-300 transition-colors">{evt.time}</td>
+                        <td className="p-6 text-gray-200 font-medium">{evt.event}</td>
+                        <td className="p-6">
+                            <span className={`px-3 py-1 rounded text-[10px] font-bold uppercase tracking-wider border ${evt.impact === 'High' ? 'bg-red-500/10 text-red-400 border-red-500/20' : evt.impact === 'Medium' ? 'bg-orange-500/10 text-orange-400 border-orange-500/20' : 'bg-blue-500/10 text-blue-400 border-blue-500/20'}`}>
+                                {evt.impact}
+                            </span>
+                        </td>
+                        <td className="p-6 text-right text-white font-mono font-bold tracking-tight">{evt.actual || '-'}</td>
+                        <td className="p-6 text-right text-gray-500 font-mono text-sm">{evt.forecast || '-'}</td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+            </div>
+        )}
       </div>
     );
   };
@@ -267,6 +286,7 @@ const MarketOverview: React.FC<MarketOverviewProps> = () => {
     { id: 'movers', title: 'Market Movers', subtitle: 'Volume & Momentum', icon: '🔥', color: 'from-orange-500 to-red-600', shadow: 'shadow-orange-500/20', enabled: features.enableMovers },
     { id: 'ai', title: 'AI Summary', subtitle: 'Daily Intelligence', icon: '🤖', color: 'from-indigo-600 to-violet-600', shadow: 'shadow-indigo-500/20', enabled: true },
     { id: 'news', title: 'News Briefing', subtitle: 'Curated Headlines', icon: '📰', color: 'from-purple-500 to-fuchsia-600', shadow: 'shadow-purple-500/20', enabled: features.enableNews },
+    { id: 'earnings_cal', title: 'Earnings Calendar', subtitle: 'Today/Upcoming Reports', icon: '💰', color: 'from-amber-500 to-yellow-600', shadow: 'shadow-amber-500/20', enabled: features.enableEarnings },
     { id: 'calendar', title: 'Eco. Calendar', subtitle: 'Key Macro Events', icon: '📅', color: 'from-slate-500 to-slate-700', shadow: 'shadow-slate-500/20', enabled: true },
   ];
 
@@ -299,6 +319,7 @@ const MarketOverview: React.FC<MarketOverviewProps> = () => {
         {activeSection === 'ai' && <AIView />}
         {activeSection === 'news' && <NewsFeed watchlist={[]} />}
         {activeSection === 'calendar' && <CalendarView />}
+        {activeSection === 'earnings_cal' && <EarningsCalendarTable />}
       </div>
     );
   }

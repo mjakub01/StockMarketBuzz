@@ -24,7 +24,7 @@ const ScannerHeader: React.FC<ScannerHeaderProps> = ({
 
   const filterConfig: { key: keyof ScannerFilters; label: string; tooltip: string }[] = [
     { key: 'projVolume', label: 'Vol > 25M (Proj)', tooltip: 'Projected EOD Volume > 25 Million shares based on current rate' },
-    { key: 'morningActive', label: '7-11 AM Active', tooltip: 'Stocks moving significantly in Pre-Market or Early Session' },
+    { key: 'morningActive', label: 'Morning Active', tooltip: 'Significant movement between 7 AM and 11 AM ET' },
     { key: 'breakout', label: 'Breakout HOD', tooltip: 'Price is above Pre-Market High or Previous Day High' },
     { key: 'highVolatility', label: 'High Volatility', tooltip: 'High intraday range (>5%) or ATR expansion' },
     { key: 'excludeDerivatives', label: 'No ETFs/SPACs', tooltip: 'Exclude ETFs, Warrants, and SPACs to find pure momentum' },
@@ -176,6 +176,10 @@ const ScannerHeader: React.FC<ScannerHeaderProps> = ({
             <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gray-900/50 rounded-lg border border-gray-700/50">
                <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
                <span className="text-[10px] font-bold text-gray-300">Active Catalyst</span>
+            </div>
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gray-900/50 rounded-lg border border-gray-700/50">
+               <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+               <span className="text-[10px] font-bold text-gray-300">Active 7-11 AM</span>
             </div>
          </div>
       </div>
