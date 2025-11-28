@@ -1,16 +1,20 @@
 
 import React, { useState, useEffect } from 'react';
-import GlobalRefreshControl from './GlobalRefreshControl';
+import { useAuth } from '../contexts/AuthContext';
+import { useSystem } from '../contexts/SystemContext';
+import { useNavigation } from '../contexts/NavigationContext';
+import AIChatAssistant from './AIChatAssistant';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
-  activeView: string;
-  onNavigate: (view: string) => void;
 }
 
-const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, activeView, onNavigate }) => {
+const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [expandedMenus, setExpandedMenus] = useState<string[]>(['scanners']);
+  const { user } = useAuth();
+  const { features } = useSystem();
+  const { activeView, navigate } = useNavigation();
 
   const toggleMenu = (id: string) => {
     setExpandedMenus(prev => 
@@ -39,7 +43,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, activeView,
         </svg>
       ),
       children: [
-        { 
+        features.enableMomentum && { 
           id: 'scanner', 
           label: 'Momentum Scanner', 
           icon: (
@@ -48,7 +52,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, activeView,
             </svg>
           ) 
         },
-        { 
+        features.enableEarnings && { 
           id: 'earnings', 
           label: 'Earnings Movers', 
           icon: (
@@ -57,7 +61,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, activeView,
             </svg>
           ) 
         },
-        { 
+        features.enableMovers && { 
           id: 'movers', 
           label: 'Market Movers', 
           icon: (
@@ -67,7 +71,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, activeView,
             </svg>
           ) 
         },
-        { 
+        features.enableOversold && { 
           id: 'oversold', 
           label: 'Oversold Rebounds', 
           icon: (
@@ -76,7 +80,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, activeView,
             </svg>
           ) 
         },
-        {
+        features.enableInsider && {
           id: 'insider',
           label: 'Insider Tracker',
           icon: (
@@ -85,9 +89,9 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, activeView,
              </svg>
           )
         }
-      ]
+      ].filter(Boolean)
     },
-    { 
+    features.enableHeatmaps && { 
       id: 'heatmaps', 
       label: 'Market Heatmaps', 
       type: 'link',
@@ -99,15 +103,15 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, activeView,
     },
     { 
       id: 'watchlist', 
-      label: 'My Watchlist', 
+      label: 'Stock Analysis', 
       type: 'link',
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
         </svg>
       )
     },
-    { 
+    features.enableNews && { 
       id: 'news', 
       label: 'News Feed', 
       type: 'link',
@@ -128,11 +132,11 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, activeView,
         </svg>
       )
     }
-  ];
+  ].filter(Boolean);
 
   useEffect(() => {
     navItems.forEach(item => {
-      if (item.type === 'group' && item.children) {
+      if (item && item.type === 'group' && item.children) {
         const hasActiveChild = item.children.some((c: any) => c.id === activeView);
         if (hasActiveChild) {
            setExpandedMenus(prev => prev.includes(item.id) ? prev : [...prev, item.id]);
@@ -142,9 +146,13 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, activeView,
   }, [activeView]);
 
   const renderNavItem = (item: any) => {
+    if (!item) return null;
     if (item.type === 'group') {
       const isExpanded = expandedMenus.includes(item.id);
-      const hasActiveChild = item.children.some((c: any) => c.id === activeView);
+      const activeChildren = item.children.filter(Boolean);
+      if (activeChildren.length === 0) return null;
+
+      const hasActiveChild = activeChildren.some((c: any) => c.id === activeView);
       
       return (
         <div key={item.id} className="space-y-1">
@@ -172,11 +180,11 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, activeView,
           </button>
           
           <div className={`space-y-1 pl-4 overflow-hidden transition-all duration-[var(--transition-speed)] ease-in-out ${isExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}>
-              {item.children.map((child: any) => (
+              {activeChildren.map((child: any) => (
                 <button
                   key={child.id}
                   onClick={() => {
-                    onNavigate(child.id);
+                    navigate(child.id);
                     if(window.innerWidth < 768) setIsSidebarOpen(false);
                   }}
                   className={`w-full flex items-center gap-3 px-[var(--padding-unit)] py-2 rounded-[var(--border-radius)] text-sm font-medium transition-all duration-[var(--transition-speed)]
@@ -204,7 +212,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, activeView,
         <button
             key={item.id}
             onClick={() => {
-                onNavigate(item.id);
+                navigate(item.id);
                 if(window.innerWidth < 768) setIsSidebarOpen(false);
             }}
             className={`w-full flex items-center gap-3 px-[var(--padding-unit)] py-3 rounded-[var(--border-radius)] text-sm font-medium transition-all duration-[var(--transition-speed)] group
@@ -243,14 +251,15 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, activeView,
           {navItems.map(item => renderNavItem(item))}
         </nav>
 
+        {/* User Info */}
         <div className="p-4 border-t border-[var(--border-color)]">
-           <div className="flex items-center gap-3 px-4 py-2">
-              <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-xs font-bold text-gray-300">
-                JD
+           <div className="flex items-center gap-3 px-2 py-2">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-r from-gray-700 to-gray-600 flex items-center justify-center text-xs font-bold text-white shadow-inner">
+                {user?.name?.charAt(0) || 'U'}
               </div>
               <div className="flex-1 min-w-0">
-                 <p className="text-sm font-medium text-[var(--text-primary)] truncate">John Doe</p>
-                 <p className="text-xs text-[var(--text-secondary)] truncate">Pro Plan</p>
+                 <p className="text-sm font-bold text-[var(--text-primary)] truncate">{user?.name}</p>
+                 <p className="text-xs text-[var(--text-secondary)] truncate capitalize">Guest Session</p>
               </div>
            </div>
         </div>
@@ -282,17 +291,27 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, activeView,
            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsSidebarOpen(false)}></div>
            <nav className="absolute top-16 left-0 right-0 bg-[var(--bg-card)] border-b border-[var(--border-color)] p-4 space-y-2 shadow-2xl animate-fade-in-down overflow-y-auto max-h-[80vh]">
               {navItems.map(item => renderNavItem(item))}
+              <div className="pt-4 mt-4 border-t border-[var(--border-color)]">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-xs text-white">
+                    {user?.name?.charAt(0)}
+                  </div>
+                  <div className="text-sm text-[var(--text-primary)]">
+                    <p className="font-bold">{user?.name}</p>
+                  </div>
+                </div>
+              </div>
            </nav>
         </div>
       )}
 
       {/* Main Content Area */}
-      <main className="flex-1 md:ml-64 p-6 md:p-10 pt-24 md:pt-10 overflow-x-hidden transition-colors duration-[var(--transition-speed)]">
+      <main className="flex-1 md:ml-64 p-6 md:p-10 pt-24 md:pt-10 overflow-x-hidden transition-colors duration-[var(--transition-speed)] relative">
         {children}
       </main>
 
-      {/* Global Refresh Floating Button */}
-      <GlobalRefreshControl />
+      {/* GLOBAL WIDGETS */}
+      <AIChatAssistant />
     </div>
   );
 };

@@ -1,13 +1,16 @@
 
 import React from 'react';
 import { MarketMover } from '../types';
+import { useNavigation } from '../contexts/NavigationContext';
 
 interface MoverCardProps {
   mover: MarketMover;
 }
 
 const MoverCard: React.FC<MoverCardProps> = ({ mover }) => {
-  const isPositive = !mover.priceMovement.includes('-');
+  const { goToStockAnalysis } = useNavigation();
+  // FIX: Cast to string to ensure .includes works even if API returns a number
+  const isPositive = !String(mover.priceMovement || '').includes('-');
   
   const getMomentumColor = (momentum: string) => {
     switch(momentum?.toLowerCase()) {
@@ -24,7 +27,10 @@ const MoverCard: React.FC<MoverCardProps> = ({ mover }) => {
   };
 
   return (
-    <div className="bg-gray-800 border border-gray-700 rounded-xl p-5 shadow-lg group hover:border-orange-500/50 transition-all duration-300 relative overflow-hidden">
+    <div 
+      onClick={() => goToStockAnalysis(mover.ticker)}
+      className="bg-gray-800 border border-gray-700 rounded-xl p-5 shadow-lg group hover:border-orange-500/50 transition-all duration-300 relative overflow-hidden cursor-pointer"
+    >
       {/* Background Pulse Effect for high sentiment */}
       {mover.marketSentiment >= 9 && (
         <div className="absolute -top-10 -right-10 w-24 h-24 bg-orange-500/20 blur-2xl rounded-full"></div>
@@ -32,7 +38,7 @@ const MoverCard: React.FC<MoverCardProps> = ({ mover }) => {
 
       <div className="flex justify-between items-start mb-4 relative z-10">
         <div>
-          <h3 className="text-2xl font-bold text-white tracking-tight flex items-center gap-2">
+          <h3 className="text-2xl font-bold text-white tracking-tight flex items-center gap-2 group-hover:text-blue-400 transition-colors">
             {mover.ticker}
             <span className={`text-[10px] px-2 py-0.5 rounded uppercase border ${getMomentumColor(mover.technicalMomentum)}`}>
               {mover.technicalMomentum}

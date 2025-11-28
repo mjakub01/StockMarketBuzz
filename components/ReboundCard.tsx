@@ -1,12 +1,15 @@
 
 import React from 'react';
 import { OversoldCandidate } from '../types';
+import { useNavigation } from '../contexts/NavigationContext';
 
 interface ReboundCardProps {
   candidate: OversoldCandidate;
 }
 
 const ReboundCard: React.FC<ReboundCardProps> = ({ candidate }) => {
+  const { goToStockAnalysis } = useNavigation();
+
   const getReactionColor = (reaction: string) => {
     switch (reaction) {
       case 'Bullish': return 'text-green-400 bg-green-900/20 border-green-500/20';
@@ -22,11 +25,14 @@ const ReboundCard: React.FC<ReboundCardProps> = ({ candidate }) => {
   };
 
   return (
-    <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 shadow-lg hover:shadow-xl hover:border-indigo-500/50 transition-all duration-300 group">
+    <div 
+      onClick={() => goToStockAnalysis(candidate.ticker)}
+      className="bg-gray-800 border border-gray-700 rounded-xl p-6 shadow-lg hover:shadow-xl hover:border-indigo-500/50 transition-all duration-300 group cursor-pointer"
+    >
       <div className="flex justify-between items-start mb-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
-             <h3 className="text-2xl font-bold text-white tracking-tight">{candidate.ticker}</h3>
+             <h3 className="text-2xl font-bold text-white tracking-tight group-hover:text-blue-400 transition-colors">{candidate.ticker}</h3>
              <span className={`text-[10px] px-2 py-0.5 rounded uppercase border font-semibold ${getReactionColor(candidate.marketReaction)}`}>
                {candidate.marketReaction}
              </span>

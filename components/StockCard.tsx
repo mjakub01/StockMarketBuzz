@@ -1,6 +1,7 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { StockCandidate } from '../types';
+import { useNavigation } from '../contexts/NavigationContext';
 
 interface StockCardProps {
   stock: StockCandidate;
@@ -24,19 +25,21 @@ const StockCard: React.FC<StockCardProps> = ({
 }) => {
   const [flash, setFlash] = useState<'green' | 'red' | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const { goToStockAnalysis } = useNavigation();
   
   // Determine which price to show based on viewMode
-  let displayPrice = stock.price;
-  let displayChange = stock.gapPercent;
+  // FIX: Cast to string to avoid crashes if API returns number
+  let displayPrice = String(stock.price || '');
+  let displayChange = String(stock.gapPercent || '');
   let changeLabel = percentLabel;
 
   if (viewMode === 'pre' && stock.preMarketPrice) {
-    displayPrice = stock.preMarketPrice;
-    displayChange = stock.preMarketChange || '0.00%';
+    displayPrice = String(stock.preMarketPrice);
+    displayChange = String(stock.preMarketChange || '0.00%');
     changeLabel = "Pre-Mkt";
   } else if (viewMode === 'post' && stock.afterHoursPrice) {
-    displayPrice = stock.afterHoursPrice;
-    displayChange = stock.afterHoursChange || '0.00%';
+    displayPrice = String(stock.afterHoursPrice);
+    displayChange = String(stock.afterHoursChange || '0.00%');
     changeLabel = "Aft-Hrs";
   }
 
@@ -44,6 +47,7 @@ const StockCard: React.FC<StockCardProps> = ({
   if (viewMode === 'pre' && !stock.preMarketPrice) changeLabel = "Pre (N/A)";
   if (viewMode === 'post' && !stock.afterHoursPrice) changeLabel = "Post (N/A)";
 
+  // FIX: Replace works reliably now that displayChange is guaranteed string
   const isHighGap = parseFloat(displayChange.replace(/[^0-9.-]/g, '')) > 20;
   const isPositive = !displayChange.includes('-');
   
@@ -90,11 +94,12 @@ const StockCard: React.FC<StockCardProps> = ({
       onDragEnd={handleDragEndInternal}
       onDragOver={onDragOver}
       onDrop={(e) => onDrop && onDrop(e, stock.symbol)}
+      onClick={() => goToStockAnalysis(stock.symbol)}
       className={`
-      bg-gray-800 border rounded-xl p-5 shadow-lg group relative overflow-hidden transition-all duration-300
+      bg-gray-800 border rounded-xl p-5 shadow-lg group relative overflow-hidden transition-all duration-300 cursor-pointer
       ${flash === 'green' ? 'border-green-500 shadow-green-500/20' : flash === 'red' ? 'border-red-500 shadow-red-500/20' : 'border-gray-700 hover:border-blue-500'}
       ${isDragging ? 'opacity-50 scale-95 border-dashed border-gray-500' : ''}
-      ${draggable ? 'cursor-grab active:cursor-grabbing' : ''}
+      ${draggable ? 'active:cursor-grabbing' : ''}
     `}>
       {/* Accent Line */}
       <div className={`absolute top-0 left-0 w-1 h-full ${isHighGap ? 'bg-green-500' : 'bg-blue-500'}`}></div>
@@ -111,7 +116,7 @@ const StockCard: React.FC<StockCardProps> = ({
               </span>
             )}
           </h3>
-          <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold">{stock.companyName}</p>
+          <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold group-hover:text-gray-300">{stock.companyName}</p>
         </div>
         <div className="text-right">
           <p className={`text-xl font-mono font-bold transition-colors duration-300 ${flash === 'green' ? 'text-green-400' : flash === 'red' ? 'text-red-400' : 'text-white'}`}>
@@ -148,7 +153,7 @@ const StockCard: React.FC<StockCardProps> = ({
             {stock.preMarketChange && viewMode !== 'pre' && (
                <div className="flex justify-between text-xs">
                  <span className="text-gray-500">Pre-Mkt:</span>
-                 <span className={`${stock.preMarketChange.includes('-') ? 'text-red-300' : 'text-green-300'} font-mono`}>
+                 <span className={`${String(stock.preMarketChange).includes('-') ? 'text-red-300' : 'text-green-300'} font-mono`}>
                     {stock.preMarketPrice} ({stock.preMarketChange})
                  </span>
                </div>
@@ -156,7 +161,7 @@ const StockCard: React.FC<StockCardProps> = ({
             {stock.afterHoursChange && viewMode !== 'post' && (
                <div className="flex justify-between text-xs">
                  <span className="text-gray-500">Aft-Hrs:</span>
-                 <span className={`${stock.afterHoursChange.includes('-') ? 'text-red-300' : 'text-green-300'} font-mono`}>
+                 <span className={`${String(stock.afterHoursChange).includes('-') ? 'text-red-300' : 'text-green-300'} font-mono`}>
                     {stock.afterHoursPrice} ({stock.afterHoursChange})
                  </span>
                </div>

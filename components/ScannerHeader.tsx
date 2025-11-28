@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { ScanStatus } from '../types';
+import { ScanStatus, ScannerFilters } from '../types';
 
 interface ScannerHeaderProps {
   onScan: () => void;
@@ -8,9 +8,29 @@ interface ScannerHeaderProps {
   lastUpdated: Date | null;
   isLive: boolean;
   onToggleLive: (value: boolean) => void;
+  filters: ScannerFilters;
+  onToggleFilter: (key: keyof ScannerFilters) => void;
 }
 
-const ScannerHeader: React.FC<ScannerHeaderProps> = ({ onScan, status, lastUpdated, isLive, onToggleLive }) => {
+const ScannerHeader: React.FC<ScannerHeaderProps> = ({ 
+  onScan, 
+  status, 
+  lastUpdated, 
+  isLive, 
+  onToggleLive,
+  filters,
+  onToggleFilter
+}) => {
+
+  const filterConfig: { key: keyof ScannerFilters; label: string; tooltip: string }[] = [
+    { key: 'projVolume', label: 'Vol > 25M (Proj)', tooltip: 'Projected EOD Volume > 25 Million shares based on current rate' },
+    { key: 'morningActive', label: '7-11 AM Active', tooltip: 'Stocks moving significantly in Pre-Market or Early Session' },
+    { key: 'breakout', label: 'Breakout HOD', tooltip: 'Price is above Pre-Market High or Previous Day High' },
+    { key: 'highVolatility', label: 'High Volatility', tooltip: 'High intraday range (>5%) or ATR expansion' },
+    { key: 'excludeDerivatives', label: 'No ETFs/SPACs', tooltip: 'Exclude ETFs, Warrants, and SPACs to find pure momentum' },
+    { key: 'lowFloatRetail', label: 'Low Inst. Own', tooltip: 'Institutional Ownership < 30% (Retail Driven)' },
+  ];
+
   return (
     <div className="mb-8 space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
@@ -81,13 +101,83 @@ const ScannerHeader: React.FC<ScannerHeaderProps> = ({ onScan, status, lastUpdat
         </div>
       </div>
 
-      {/* Criteria Tags */}
-      <div className="flex flex-wrap gap-2">
-        <span className="px-3 py-1 bg-gray-800 text-gray-300 text-xs rounded-full border border-gray-700">RV &gt; 5x</span>
-        <span className="px-3 py-1 bg-gray-800 text-gray-300 text-xs rounded-full border border-gray-700">Price $2-$20</span>
-        <span className="px-3 py-1 bg-gray-800 text-gray-300 text-xs rounded-full border border-gray-700">Float &lt; 10M</span>
-        <span className="px-3 py-1 bg-gray-800 text-gray-300 text-xs rounded-full border border-gray-700">Gap &ge; 2%</span>
-        <span className="px-3 py-1 bg-gray-800 text-gray-300 text-xs rounded-full border border-gray-700">Catalyst + News</span>
+      {/* Standard Filters */}
+      <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-800">
+        <span className="flex items-center text-xs font-bold text-gray-500 uppercase mr-2 h-8">Filters:</span>
+        {filterConfig.map(f => (
+          <button
+            key={f.key}
+            onClick={() => onToggleFilter(f.key)}
+            title={f.tooltip}
+            className={`
+              px-3 py-1.5 text-xs rounded-full border transition-all duration-200 font-medium flex items-center gap-1.5
+              ${filters[f.key] 
+                ? 'bg-blue-600/20 text-blue-300 border-blue-500/50 shadow-[0_0_10px_rgba(59,130,246,0.2)]' 
+                : 'bg-gray-800 text-gray-400 border-gray-700 hover:bg-gray-700 hover:text-gray-200'}
+            `}
+          >
+            {filters[f.key] && (
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+              </svg>
+            )}
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ROSS Filters Section */}
+      <div className={`mt-4 p-4 rounded-xl border transition-all duration-300 ${filters.enableRoss ? 'bg-green-900/10 border-green-500/40 shadow-[0_0_20px_rgba(34,197,94,0.1)]' : 'bg-gray-800/20 border-gray-700/50'}`}>
+         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-3">
+            <div className="flex items-start gap-3">
+               <div className={`p-2 rounded-lg ${filters.enableRoss ? 'bg-green-500/20 text-green-400' : 'bg-gray-700/50 text-gray-500'}`}>
+                  <span className="text-xl">🟩</span>
+               </div>
+               <div>
+                  <h3 className={`font-bold text-sm uppercase tracking-wide flex items-center gap-2 ${filters.enableRoss ? 'text-green-400' : 'text-gray-400'}`}>
+                     ROSS Filters
+                     {filters.enableRoss && <span className="text-[10px] bg-green-500 text-black px-1.5 rounded font-extrabold">ACTIVE</span>}
+                  </h3>
+                  <p className={`text-[10px] mt-0.5 ${filters.enableRoss ? 'text-green-500/70' : 'text-gray-500'}`}>Ross Cameron's 5-Step High Momentum Strategy</p>
+               </div>
+            </div>
+            
+            <label className="relative inline-flex items-center cursor-pointer group">
+              <input 
+                type="checkbox" 
+                checked={filters.enableRoss} 
+                onChange={() => onToggleFilter('enableRoss')} 
+                className="sr-only peer" 
+              />
+              <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500 shadow-inner"></div>
+              <span className={`ml-2 text-xs font-medium transition-colors ${filters.enableRoss ? 'text-green-400' : 'text-gray-400 group-hover:text-gray-300'}`}>
+                Enable Strategy
+              </span>
+            </label>
+         </div>
+
+         <div className={`flex flex-wrap gap-2 transition-all duration-300 ${filters.enableRoss ? 'opacity-100' : 'opacity-40 grayscale pointer-events-none'}`}>
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gray-900/50 rounded-lg border border-gray-700/50">
+               <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+               <span className="text-[10px] font-bold text-gray-300">RVOL ≥ 5x</span>
+            </div>
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gray-900/50 rounded-lg border border-gray-700/50">
+               <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+               <span className="text-[10px] font-bold text-gray-300">Price $2–$20</span>
+            </div>
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gray-900/50 rounded-lg border border-gray-700/50">
+               <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+               <span className="text-[10px] font-bold text-gray-300">Float &lt; 10M</span>
+            </div>
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gray-900/50 rounded-lg border border-gray-700/50">
+               <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+               <span className="text-[10px] font-bold text-gray-300">Gap ≥ 2%</span>
+            </div>
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gray-900/50 rounded-lg border border-gray-700/50">
+               <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+               <span className="text-[10px] font-bold text-gray-300">Active Catalyst</span>
+            </div>
+         </div>
       </div>
     </div>
   );

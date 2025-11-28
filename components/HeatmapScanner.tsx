@@ -4,11 +4,13 @@ import SourceList from './SourceList';
 import { scanMarketHeatmaps } from '../services/geminiService';
 import { HeatmapResult, ScanStatus, SearchSource } from '../types';
 import { parsePercentage } from '../utils';
+import { useNavigation } from '../contexts/NavigationContext';
 
 const HeatmapScanner: React.FC = () => {
   const [data, setData] = useState<HeatmapResult | null>(null);
   const [status, setStatus] = useState<ScanStatus>(ScanStatus.IDLE);
   const [error, setError] = useState<string | null>(null);
+  const { goToStockAnalysis } = useNavigation();
 
   const handleScan = async () => {
     setStatus(ScanStatus.SCANNING);
@@ -123,7 +125,7 @@ const HeatmapScanner: React.FC = () => {
                             <span className="block opacity-75 mb-0.5">Leaders:</span>
                             <div className="flex gap-1 flex-wrap">
                                {sector.leaders.map(l => (
-                                 <span key={l} className="bg-black/20 px-1.5 rounded text-[10px] font-mono">{l}</span>
+                                 <button key={l} onClick={() => goToStockAnalysis(l)} className="bg-black/20 px-1.5 rounded text-[10px] font-mono hover:bg-black/40 transition-colors">{l}</button>
                                ))}
                             </div>
                          </div>
@@ -141,7 +143,11 @@ const HeatmapScanner: React.FC = () => {
                </h3>
                <div className="space-y-3">
                  {data.volatility.map((vol, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-3 bg-gray-900 rounded-lg border border-gray-800">
+                    <div 
+                      key={idx} 
+                      onClick={() => vol.type === 'Ticker' ? goToStockAnalysis(vol.symbol) : null}
+                      className={`flex items-center justify-between p-3 bg-gray-900 rounded-lg border border-gray-800 ${vol.type === 'Ticker' ? 'cursor-pointer hover:border-blue-500' : ''}`}
+                    >
                        <div className="flex items-center gap-3">
                           <span className={`text-xs px-2 py-0.5 rounded uppercase font-bold text-gray-400 border border-gray-700`}>{vol.type}</span>
                           <span className="font-bold text-white text-lg">{vol.symbol}</span>
@@ -164,7 +170,11 @@ const HeatmapScanner: React.FC = () => {
                </h3>
                <div className="space-y-3">
                  {data.options.map((opt, idx) => (
-                    <div key={idx} className="p-3 bg-gray-900 rounded-lg border border-gray-800 relative overflow-hidden group">
+                    <div 
+                      key={idx} 
+                      onClick={() => goToStockAnalysis(opt.ticker)}
+                      className="p-3 bg-gray-900 rounded-lg border border-gray-800 relative overflow-hidden group cursor-pointer hover:border-purple-500"
+                    >
                        <div className={`absolute left-0 top-0 bottom-0 w-1 ${opt.direction === 'Bullish' ? 'bg-green-500' : 'bg-red-500'}`}></div>
                        <div className="flex justify-between items-start pl-3">
                           <div>
@@ -192,7 +202,11 @@ const HeatmapScanner: React.FC = () => {
              </h3>
              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                 {data.volume.map((vol, idx) => (
-                   <div key={idx} className="p-4 bg-gray-900 rounded-lg border border-gray-800 flex flex-col justify-between h-full">
+                   <div 
+                     key={idx} 
+                     onClick={() => goToStockAnalysis(vol.ticker)}
+                     className="p-4 bg-gray-900 rounded-lg border border-gray-800 flex flex-col justify-between h-full cursor-pointer hover:border-blue-500 hover:shadow-lg transition-all"
+                   >
                       <div className="flex justify-between items-start mb-2">
                          <span className="font-bold text-xl text-white">{vol.ticker}</span>
                          <span className={`px-2 py-0.5 rounded text-sm font-bold ${vol.trend === 'Up' ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'}`}>

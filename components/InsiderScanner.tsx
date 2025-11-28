@@ -5,12 +5,14 @@ import UniversalSortControl from './UniversalSortControl';
 import { scanInsiderTrading } from '../services/geminiService';
 import { InsiderScanResult, InsiderStockSummary, ScanStatus } from '../types';
 import { useSorter, SortConfig } from '../hooks/useSorter';
+import { useNavigation } from '../contexts/NavigationContext';
 
 const InsiderScanner: React.FC = () => {
   const [data, setData] = useState<InsiderScanResult | null>(null);
   const [status, setStatus] = useState<ScanStatus>(ScanStatus.IDLE);
   const [error, setError] = useState<string | null>(null);
   const [expandedStock, setExpandedStock] = useState<string | null>(null);
+  const { goToStockAnalysis } = useNavigation();
 
   // Note: We are sorting the 'stocks' list, transactions inside are not sorted by this control
   const sortConfig: SortConfig<InsiderStockSummary>[] = [
@@ -113,7 +115,7 @@ const InsiderScanner: React.FC = () => {
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                         <div className="flex-1">
                             <div className="flex items-center gap-3 mb-1">
-                                <h3 className="text-2xl font-bold text-white tracking-tight">{stock.ticker}</h3>
+                                <h3 className="text-2xl font-bold text-white tracking-tight group-hover:text-blue-400 transition-colors">{stock.ticker}</h3>
                                 <span className={`px-2 py-0.5 text-xs font-bold uppercase rounded border ${getSentimentColor(stock.netActivity)}`}>
                                     {stock.netActivity}
                                 </span>
@@ -146,7 +148,15 @@ const InsiderScanner: React.FC = () => {
                 {/* Expanded Details - Transactions */}
                 {expandedStock === stock.ticker && (
                     <div className="border-t border-gray-700 bg-gray-900/30 p-6 animate-fade-in-down">
-                        <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">Recent Transactions</h4>
+                        <div className="flex justify-between items-center mb-4">
+                           <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider">Recent Transactions</h4>
+                           <button 
+                             onClick={(e) => { e.stopPropagation(); goToStockAnalysis(stock.ticker); }}
+                             className="text-xs bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded font-bold transition-colors"
+                           >
+                             Analyze {stock.ticker}
+                           </button>
+                        </div>
                         <div className="overflow-x-auto">
                             <table className="w-full text-left text-sm">
                                 <thead>

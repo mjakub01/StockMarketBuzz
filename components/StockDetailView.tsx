@@ -1,357 +1,362 @@
 
+import React, { useMemo, useState } from 'react';
+import { useStockAnalysis } from '../contexts/StockAnalysisContext';
+import { StockAnalysisFull, ChartOverlay } from '../types';
+import { useDraggableLayout } from '../hooks/useDraggableLayout';
 
-import React, { useEffect, useState } from 'react';
-import { StockTechnicalAnalysis } from '../types';
-import { analyzeStockTechnical } from '../services/geminiService';
+// --- SUB-COMPONENTS (With Drag Handles) ---
+
+const DragHandle = () => (
+  <div className="cursor-grab active:cursor-grabbing p-1.5 mr-2 text-gray-600 hover:text-gray-300 transition-colors opacity-0 group-hover:opacity-100">
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+    </svg>
+  </div>
+);
+
+const DetailHeader = React.memo(({ data, onRefresh, lastUpdated, onResetLayout }: { data: StockAnalysisFull, onRefresh: () => void, lastUpdated: Date | null, onResetLayout: () => void }) => (
+  <div className="flex flex-col md:flex-row justify-between items-end gap-4 pb-6 border-b border-gray-800">
+     <div>
+        <h1 className="text-4xl font-extrabold text-white tracking-tight flex items-center gap-3">
+           {data.symbol}
+           <span className="text-lg font-medium text-gray-400 px-3 py-1 bg-gray-800 rounded-full">{data.companyName}</span>
+        </h1>
+        <div className="flex items-center gap-4 mt-2">
+           <button onClick={onRefresh} className="text-xs font-bold text-blue-400 hover:text-white flex items-center gap-1 transition-colors">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              REFRESH DATA
+           </button>
+           <button onClick={onResetLayout} className="text-xs font-bold text-gray-500 hover:text-white flex items-center gap-1 transition-colors">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              RESET LAYOUT
+           </button>
+           {lastUpdated && <span className="text-xs text-gray-600">Updated: {lastUpdated.toLocaleTimeString()}</span>}
+        </div>
+     </div>
+     <div className="text-right">
+        <div className="text-4xl font-mono font-bold text-white">${data.price.toFixed(2)}</div>
+        <div className={`text-lg font-bold ${data.change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+           {data.change > 0 ? '+' : ''}{data.change} ({data.changePercent}%)
+        </div>
+     </div>
+  </div>
+));
+
+const PriceActionCard = React.memo(({ candles, currentPrice }: { candles: any[], currentPrice: number }) => {
+   const dayHigh = candles.length > 0 ? Math.max(...candles.map(c => c.high)) : currentPrice;
+   const dayLow = candles.length > 0 ? Math.min(...candles.map(c => c.low)) : currentPrice;
+   const openPrice = candles.length > 0 ? candles[0].open : currentPrice;
+   
+   return (
+      <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 shadow-lg h-full group hover:border-gray-700 transition-colors">
+         <div className="flex items-center mb-4">
+            <DragHandle />
+            <h3 className="font-bold text-gray-400 text-sm uppercase tracking-wider flex items-center gap-2">
+               <span className="text-blue-500">📉</span> Price Action
+            </h3>
+         </div>
+         <div className="space-y-4">
+            <div className="flex justify-between items-center border-b border-gray-800 pb-2">
+               <span className="text-gray-500 text-sm">Last Price</span>
+               <span className="text-2xl font-mono font-bold text-white">${currentPrice.toFixed(2)}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+               <div>
+                  <span className="text-xs text-gray-500 block uppercase">Day High</span>
+                  <span className="text-green-400 font-mono font-bold">${dayHigh.toFixed(2)}</span>
+               </div>
+               <div>
+                  <span className="text-xs text-gray-500 block uppercase">Day Low</span>
+                  <span className="text-red-400 font-mono font-bold">${dayLow.toFixed(2)}</span>
+               </div>
+               <div>
+                  <span className="text-xs text-gray-500 block uppercase">Open</span>
+                  <span className="text-gray-300 font-mono">${openPrice.toFixed(2)}</span>
+               </div>
+               <div>
+                  <span className="text-xs text-gray-500 block uppercase">Range</span>
+                  <span className="text-gray-300 font-mono">${(dayHigh - dayLow).toFixed(2)}</span>
+               </div>
+            </div>
+         </div>
+      </div>
+   );
+});
+
+const VolumeLiquidityCard = React.memo(({ fundamentals }: { fundamentals: any }) => (
+   <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 shadow-lg h-full group hover:border-gray-700 transition-colors">
+      <div className="flex items-center mb-4">
+         <DragHandle />
+         <h3 className="font-bold text-gray-400 text-sm uppercase tracking-wider flex items-center gap-2">
+            <span className="text-purple-500">📊</span> Volume & Liquidity
+         </h3>
+      </div>
+      <div className="space-y-4">
+         <div className="flex justify-between items-center border-b border-gray-800 pb-2">
+            <span className="text-gray-500 text-sm">Avg Volume (50D)</span>
+            <span className="text-white font-mono font-bold">{fundamentals.avgVolume}</span>
+         </div>
+         <div className="flex justify-between items-center border-b border-gray-800 pb-2">
+            <span className="text-gray-500 text-sm">Float</span>
+            <span className="text-white font-mono font-bold">{fundamentals.float}</span>
+         </div>
+         <div className="flex justify-between items-center border-b border-gray-800 pb-2">
+            <span className="text-gray-500 text-sm">Market Cap</span>
+            <span className="text-white font-mono font-bold">{fundamentals.marketCap}</span>
+         </div>
+         <div className="flex justify-between items-center">
+            <span className="text-gray-500 text-sm">P/E Ratio</span>
+            <span className="text-white font-mono">{fundamentals.peRatio}</span>
+         </div>
+      </div>
+   </div>
+));
+
+const TechnicalHealthCard = React.memo(({ technicals }: { technicals: any }) => {
+   const rsi = technicals.rsi || 50;
+   const rsiStatus = rsi > 70 ? 'Overbought' : rsi < 30 ? 'Oversold' : 'Neutral';
+   const rsiColor = rsi > 70 ? 'text-red-400' : rsi < 30 ? 'text-green-400' : 'text-gray-400';
+
+   return (
+      <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 shadow-lg h-full group hover:border-gray-700 transition-colors">
+         <div className="flex items-center mb-4">
+            <DragHandle />
+            <h3 className="font-bold text-gray-400 text-sm uppercase tracking-wider flex items-center gap-2">
+               <span className="text-orange-500">⚡</span> Technical Health
+            </h3>
+         </div>
+         <div className="space-y-4">
+            <div className="flex justify-between items-center border-b border-gray-800 pb-2">
+               <span className="text-gray-500 text-sm">RSI (14)</span>
+               <div className="text-right">
+                  <span className={`font-mono font-bold text-lg ${rsiColor}`}>{rsi}</span>
+                  <span className="text-xs block text-gray-500 uppercase">{rsiStatus}</span>
+               </div>
+            </div>
+            <div className="flex justify-between items-center border-b border-gray-800 pb-2">
+               <span className="text-gray-500 text-sm">Trend Structure</span>
+               <span className={`px-2 py-1 rounded text-xs font-bold uppercase border ${technicals.trend === 'Bullish' ? 'bg-green-900/30 text-green-400 border-green-500/30' : 'bg-red-900/30 text-red-400 border-red-500/30'}`}>
+                  {technicals.trend}
+               </span>
+            </div>
+            <div className="flex justify-between items-center pt-1">
+               <span className="text-gray-500 text-sm">MACD</span>
+               <span className="text-gray-300 text-sm font-medium">{technicals.macd || 'Neutral'}</span>
+            </div>
+         </div>
+      </div>
+   );
+});
+
+const SRLevelsPanel = React.memo(({ overlays }: { overlays: ChartOverlay[] }) => {
+  const levels = overlays.filter(o => o.type === 'Support' || o.type === 'Resistance');
+  
+  if (levels.length === 0) return (
+     <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 shadow-lg h-full group">
+        <div className="flex items-center mb-2">
+           <DragHandle />
+           <h3 className="font-bold text-gray-400 text-sm uppercase">Key Levels</h3>
+        </div>
+        <p className="text-gray-500 text-sm italic">No major levels detected.</p>
+     </div>
+  );
+
+  return (
+    <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 shadow-lg h-full group hover:border-gray-700 transition-colors">
+       <div className="flex items-center mb-4">
+          <DragHandle />
+          <h3 className="font-bold text-white flex items-center gap-2">
+             <span className="text-blue-400">🎯</span> Support & Resistance Zones
+          </h3>
+       </div>
+       <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+             <thead className="text-xs text-gray-500 uppercase font-bold border-b border-gray-800">
+                <tr>
+                   <th className="pb-3 pl-2">Price Level</th>
+                   <th className="pb-3">Type</th>
+                   <th className="pb-3">Confidence</th>
+                   <th className="pb-3 text-right pr-2">Logic</th>
+                </tr>
+             </thead>
+             <tbody className="divide-y divide-gray-800">
+                {levels.map((lvl, i) => (
+                   <tr key={i} className="hover:bg-gray-800/50 transition-colors">
+                      <td className="py-3 pl-2 font-mono font-bold text-white text-lg">${lvl.yValue?.toFixed(2)}</td>
+                      <td className="py-3">
+                         <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${lvl.type === 'Support' ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
+                            {lvl.type}
+                         </span>
+                      </td>
+                      <td className="py-3">
+                         <div className="flex items-center gap-2">
+                            <div className="flex gap-0.5">
+                               {[...Array(lvl.strength === 'Major' ? 3 : 1)].map((_, idx) => (
+                                  <div key={idx} className={`w-1.5 h-3 rounded-sm ${lvl.type === 'Support' ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                               ))}
+                            </div>
+                            <span className="text-xs text-gray-400">{lvl.testCount ? `${lvl.testCount}x` : 'Active'}</span>
+                         </div>
+                      </td>
+                      <td className="py-3 text-right pr-2 text-gray-500 text-xs font-medium">
+                         {lvl.method || 'Pivot'}
+                      </td>
+                   </tr>
+                ))}
+             </tbody>
+          </table>
+       </div>
+    </div>
+  );
+});
+
+const NewsListPanel = React.memo(({ news }: { news: any[] }) => (
+    <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 h-full shadow-lg group hover:border-gray-700 transition-colors">
+       <div className="flex items-center mb-4">
+          <DragHandle />
+          <h3 className="font-bold text-white flex items-center gap-2">
+             Latest Headlines
+             <span className="bg-blue-600 text-white text-[10px] px-1.5 rounded">LIVE</span>
+          </h3>
+       </div>
+       <div className="space-y-4">
+          {news.length === 0 ? <p className="text-gray-500 text-sm">No recent news found.</p> : news.slice(0, 5).map((n, i) => (
+             <div key={i} className="group cursor-pointer border-b border-gray-800 pb-3 last:border-0 last:pb-0">
+                <div className="flex justify-between text-xs text-gray-500 mb-1">
+                   <span className="uppercase font-bold">{n.source}</span>
+                   <span>{n.time}</span>
+                </div>
+                <p className="text-sm text-gray-200 group-hover:text-blue-400 transition-colors font-medium leading-snug">
+                   {n.headline}
+                </p>
+                {n.sentiment && n.sentiment !== 'Neutral' && (
+                   <span className={`text-[10px] mt-1 inline-block px-1.5 rounded border ${n.sentiment === 'Positive' ? 'text-green-400 border-green-900' : 'text-red-400 border-red-900'}`}>
+                      {n.sentiment}
+                   </span>
+                )}
+             </div>
+          ))}
+       </div>
+    </div>
+));
+
+const AnalystSummaryPanel = React.memo(({ summary }: { summary: string }) => (
+    <div className="bg-gradient-to-r from-gray-900 to-gray-800 border border-gray-700 rounded-xl p-6 h-full group hover:border-gray-600 transition-colors">
+       <div className="flex items-center mb-2">
+          <DragHandle />
+          <h4 className="text-sm font-bold text-gray-400 uppercase">Analyst Summary</h4>
+       </div>
+       <p className="text-gray-200 leading-relaxed font-light">{summary}</p>
+    </div>
+));
+
+// --- MAIN COMPONENT ---
+
+type WidgetId = 'price' | 'volume' | 'technicals' | 'sr' | 'news' | 'summary';
+
+const defaultLayout: WidgetId[] = ['price', 'volume', 'technicals', 'sr', 'news', 'summary'];
 
 interface StockDetailViewProps {
-  ticker: string;
-  onClose: () => void;
+  ticker: string | null;
+  isEmbedded?: boolean;
 }
 
-const StockDetailView: React.FC<StockDetailViewProps> = ({ ticker, onClose }) => {
-  const [data, setData] = useState<StockTechnicalAnalysis | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+const StockDetailView: React.FC<StockDetailViewProps> = ({ ticker, isEmbedded = false }) => {
+  const { analysisData: data, isLoading: loading, loadStock, lastUpdated } = useStockAnalysis();
+  const { layout, moveItem, resetLayout, setIsDragging } = useDraggableLayout<WidgetId>(`stock_view_layout_${ticker || 'default'}`, defaultLayout);
+  const [draggedId, setDraggedId] = useState<WidgetId | null>(null);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const result = await analyzeStockTechnical(ticker);
-        setData(result);
-      } catch (err) {
-        setError("Failed to load technical analysis. Please try again.");
-      } finally {
-        setLoading(false);
-      }
-    };
+  if (!ticker) return <div className="text-center py-10 text-gray-500">Select a stock to begin analysis</div>;
 
-    if (ticker) fetchData();
-  }, [ticker]);
-
-  const getTrendColor = (trend: string) => {
-    if (trend.includes('Bullish')) return 'text-green-400 border-green-500 bg-green-900/20';
-    if (trend.includes('Bearish')) return 'text-red-400 border-red-500 bg-red-900/20';
-    return 'text-yellow-400 border-yellow-500 bg-yellow-900/20';
+  const handleRefresh = () => {
+    if (ticker) loadStock(ticker, true);
   };
 
-  const getVolColor = (vol: string) => {
-    if (vol === 'High') return 'bg-red-500';
-    if (vol === 'Medium') return 'bg-yellow-500';
-    return 'bg-blue-500';
+  const handleDragStart = (e: React.DragEvent, id: WidgetId, index: number) => {
+    setDraggedId(id);
+    setIsDragging(true);
+    e.dataTransfer.effectAllowed = "move";
+    // Must set text/plain to allow dropping in some browsers
+    e.dataTransfer.setData("text/plain", index.toString());
   };
 
-  const getRiskColor = (risk: string) => {
-    switch (risk?.toLowerCase()) {
-      case 'low': return 'text-green-400 bg-green-900/30';
-      case 'medium': return 'text-yellow-400 bg-yellow-900/30';
-      case 'high': return 'text-red-400 bg-red-900/30';
-      default: return 'text-gray-400 bg-gray-800';
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault(); // Necessary to allow dropping
+  };
+
+  const handleDrop = (e: React.DragEvent, targetIndex: number) => {
+    e.preventDefault();
+    const sourceIndex = parseInt(e.dataTransfer.getData("text/plain"));
+    if (!isNaN(sourceIndex) && sourceIndex !== targetIndex) {
+      moveItem(sourceIndex, targetIndex);
+    }
+    setDraggedId(null);
+    setIsDragging(false);
+  };
+
+  if (loading && !data) return (
+      <div className="flex flex-col items-center justify-center py-20">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
+          <p className="text-gray-400 animate-pulse">Running full technical analysis on {ticker}...</p>
+      </div>
+  );
+
+  if (!data || (data.symbol !== ticker && !loading)) return (
+      <div className="p-8 text-center text-gray-400 bg-gray-900/30 border border-gray-800 rounded-xl">
+          No analysis data loaded.
+      </div>
+  );
+
+  const technicals = data.technicals || { summary: "Analysis unavailable", rsi: 50, trend: "Neutral", macd: "" };
+  const fundamentals = data.fundamentals || { marketCap: "N/A", float: "N/A", peRatio: "N/A", avgVolume: "N/A" };
+  const overlays = data.overlays || [];
+  const candles = data.candles || [];
+
+  // Component Mapping
+  const renderWidget = (id: WidgetId) => {
+    switch(id) {
+      case 'price': return <PriceActionCard candles={candles} currentPrice={data.price} />;
+      case 'volume': return <VolumeLiquidityCard fundamentals={fundamentals} />;
+      case 'technicals': return <TechnicalHealthCard technicals={technicals} />;
+      case 'sr': return <SRLevelsPanel overlays={overlays} />;
+      case 'news': return <NewsListPanel news={data.news || []} />;
+      case 'summary': return <AnalystSummaryPanel summary={technicals.summary} />;
+      default: return null;
     }
   };
 
-  if (!ticker) return null;
+  // Grid Span Mapping (Responsive sizing)
+  const getWidgetClass = (id: WidgetId) => {
+    switch(id) {
+      case 'sr': return 'col-span-1 lg:col-span-2'; // S/R takes 2 cols on large
+      case 'news': return 'col-span-1 lg:col-span-1';
+      case 'summary': return 'col-span-1 md:col-span-2 lg:col-span-3'; // Summary takes full width
+      default: return 'col-span-1'; // Cards take 1 col
+    }
+  };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
-      <div className="bg-gray-900 border border-gray-700 w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl shadow-2xl flex flex-col">
-        
-        {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-800 bg-gray-900 sticky top-0 z-10">
-          <div>
-            <h2 className="text-3xl font-bold text-white tracking-tight">{ticker}</h2>
-            <p className="text-sm text-gray-400 mt-1">Technical Analysis & Key Levels</p>
-          </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-800 rounded-full transition-colors text-gray-400 hover:text-white">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        {/* Content */}
-        <div className="p-6 flex-1">
-          {loading ? (
-            <div className="flex flex-col items-center justify-center py-20 text-gray-500">
-               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
-               <p>Analyzing price action, trend lines, and chart patterns...</p>
+    <div className="animate-fade-in w-full max-w-7xl mx-auto space-y-6">
+      <DetailHeader data={data} onRefresh={handleRefresh} lastUpdated={lastUpdated} onResetLayout={resetLayout} />
+      
+      {/* Draggable Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+         {layout.map((id, index) => (
+            <div 
+              key={id} 
+              draggable
+              onDragStart={(e) => handleDragStart(e, id, index)}
+              onDragOver={handleDragOver}
+              onDrop={(e) => handleDrop(e, index)}
+              className={`${getWidgetClass(id)} transition-all duration-200 ${draggedId === id ? 'opacity-50 scale-95 border-2 border-dashed border-blue-500 rounded-xl' : ''}`}
+            >
+               {renderWidget(id)}
             </div>
-          ) : error ? (
-            <div className="text-center py-20 text-red-400">
-              <p>{error}</p>
-              <button onClick={onClose} className="mt-4 px-4 py-2 bg-gray-800 rounded hover:bg-gray-700 text-white">Close</button>
-            </div>
-          ) : data ? (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              
-              {/* Left Column: Stats */}
-              <div className="space-y-6">
-                
-                {/* Price & Trend */}
-                <div className="flex items-end gap-4 mb-4">
-                   <span className="text-4xl font-mono font-bold text-white">{data.currentPrice}</span>
-                   <span className={`px-3 py-1 rounded-lg text-sm font-bold border ${getTrendColor(data.trendStrength)}`}>
-                     {data.trendStrength}
-                   </span>
-                </div>
-
-                {/* Volatility Meter */}
-                <div className="bg-gray-800/50 p-5 rounded-xl border border-gray-700">
-                   <h3 className="text-gray-400 text-xs uppercase font-bold mb-3">Volatility Level</h3>
-                   <div className="flex items-center gap-3">
-                      <div className="flex-1 h-3 bg-gray-700 rounded-full overflow-hidden">
-                        <div 
-                          className={`h-full ${getVolColor(data.volatilityLevel)} transition-all duration-500`} 
-                          style={{ width: data.volatilityLevel === 'High' ? '90%' : data.volatilityLevel === 'Medium' ? '60%' : '30%' }}
-                        ></div>
-                      </div>
-                      <span className="text-white font-medium">{data.volatilityLevel}</span>
-                   </div>
-                   <p className="text-xs text-gray-500 mt-2">
-                     {data.volatilityLevel === 'High' ? 'Expect large price swings.' : 'Price action is relatively stable.'}
-                   </p>
-                </div>
-
-                {/* Catalyst */}
-                <div className="bg-gray-800/50 p-5 rounded-xl border border-gray-700">
-                   <h3 className="text-indigo-400 text-xs uppercase font-bold mb-2 flex items-center gap-2">
-                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                     </svg>
-                     Latest Catalyst
-                   </h3>
-                   <p className="text-gray-200 text-sm leading-relaxed">{data.recentCatalyst}</p>
-                </div>
-
-                {/* Summary */}
-                <div className="bg-blue-900/20 p-5 rounded-xl border border-blue-500/20">
-                   <h3 className="text-blue-400 text-xs uppercase font-bold mb-2">Technical Summary</h3>
-                   <p className="text-gray-300 text-sm italic">"{data.summary}"</p>
-                </div>
-
-              </div>
-
-              {/* Right Column: S/R Levels */}
-              <div>
-                <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                  </svg>
-                  Support & Resistance
-                </h3>
-
-                <div className="bg-gray-800 rounded-xl overflow-hidden border border-gray-700">
-                  {/* Resistance Section */}
-                  <div className="bg-red-900/10 border-b border-gray-700 p-2">
-                    <h4 className="text-red-400 text-xs font-bold uppercase text-center tracking-wider">Resistance Zones (Sell/Trim)</h4>
-                  </div>
-                  <div className="divide-y divide-gray-700">
-                    {data.resistanceLevels.map((level, i) => (
-                      <div key={i} className="flex justify-between items-center p-4 hover:bg-gray-700/30 transition-colors">
-                        <div>
-                          <p className="text-white font-mono font-bold text-lg">{level.price}</p>
-                          <p className="text-xs text-red-300">{level.type}</p>
-                        </div>
-                        <div className="text-right max-w-[50%]">
-                           <span className="text-gray-400 text-xs">{level.description}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Current Price Divider */}
-                  <div className="bg-gray-900 py-3 flex items-center justify-center border-t border-b border-gray-700">
-                     <span className="text-gray-500 text-xs uppercase tracking-widest">Current Price Action</span>
-                  </div>
-
-                  {/* Support Section */}
-                  <div className="divide-y divide-gray-700">
-                    {data.supportLevels.map((level, i) => (
-                      <div key={i} className="flex justify-between items-center p-4 hover:bg-gray-700/30 transition-colors">
-                        <div>
-                          <p className="text-white font-mono font-bold text-lg">{level.price}</p>
-                          <p className="text-xs text-green-300">{level.type}</p>
-                        </div>
-                        <div className="text-right max-w-[50%]">
-                           <span className="text-gray-400 text-xs">{level.description}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="bg-green-900/10 border-t border-gray-700 p-2">
-                    <h4 className="text-green-400 text-xs font-bold uppercase text-center tracking-wider">Support Zones (Buy/Dip)</h4>
-                  </div>
-                </div>
-
-                <div className="mt-4 p-4 bg-gray-900/50 rounded-lg border border-gray-800 text-xs text-gray-500">
-                  <p>Levels calculated based on recent highs/lows, moving averages, and volume clusters from the last 30-90 days.</p>
-                </div>
-              </div>
-            </div>
-          ) : null}
-
-          {/* Auto Trendline Analysis Section */}
-          {data && data.autoTrendlines && (
-            <div className="mt-8 pt-8 border-t border-gray-800">
-              <h3 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
-                <span className="text-3xl">📐</span> Auto Trendline Analysis
-              </h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                 {/* Uptrends */}
-                 <div className="bg-gray-800/50 rounded-xl border border-gray-700 p-5">
-                   <h4 className="text-green-400 font-bold mb-4 flex items-center gap-2 uppercase text-sm tracking-wider">
-                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                     </svg>
-                     Bullish Uptrends
-                   </h4>
-                   {data.autoTrendlines.uptrends.length > 0 ? (
-                     <div className="space-y-4">
-                       {data.autoTrendlines.uptrends.map((trend, i) => (
-                         <div key={i} className="bg-gray-900 p-3 rounded-lg border border-gray-800">
-                           <div className="flex justify-between items-center mb-1">
-                             <div className="text-sm font-mono text-white">
-                               {trend.start} <span className="text-gray-500 mx-1">→</span> {trend.end}
-                             </div>
-                             <span className="bg-green-900/40 text-green-400 text-xs px-2 py-0.5 rounded font-bold">{trend.strength}/10</span>
-                           </div>
-                           <div className="flex justify-between items-end text-xs text-gray-500">
-                             <span>Touches: {trend.touches}</span>
-                             <span className="italic">{trend.notes}</span>
-                           </div>
-                         </div>
-                       ))}
-                     </div>
-                   ) : (
-                     <p className="text-gray-500 text-sm italic">No significant uptrend lines detected.</p>
-                   )}
-                 </div>
-
-                 {/* Downtrends */}
-                 <div className="bg-gray-800/50 rounded-xl border border-gray-700 p-5">
-                   <h4 className="text-red-400 font-bold mb-4 flex items-center gap-2 uppercase text-sm tracking-wider">
-                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" />
-                     </svg>
-                     Bearish Downtrends
-                   </h4>
-                   {data.autoTrendlines.downtrends.length > 0 ? (
-                     <div className="space-y-4">
-                       {data.autoTrendlines.downtrends.map((trend, i) => (
-                         <div key={i} className="bg-gray-900 p-3 rounded-lg border border-gray-800">
-                           <div className="flex justify-between items-center mb-1">
-                             <div className="text-sm font-mono text-white">
-                               {trend.start} <span className="text-gray-500 mx-1">→</span> {trend.end}
-                             </div>
-                             <span className="bg-red-900/40 text-red-400 text-xs px-2 py-0.5 rounded font-bold">{trend.strength}/10</span>
-                           </div>
-                           <div className="flex justify-between items-end text-xs text-gray-500">
-                             <span>Touches: {trend.touches}</span>
-                             <span className="italic">{trend.notes}</span>
-                           </div>
-                         </div>
-                       ))}
-                     </div>
-                   ) : (
-                     <p className="text-gray-500 text-sm italic">No significant downtrend lines detected.</p>
-                   )}
-                 </div>
-              </div>
-
-              {/* Breaks */}
-              {data.autoTrendlines.breaks.length > 0 && (
-                <div className="mb-6 grid gap-4">
-                  {data.autoTrendlines.breaks.map((brk, i) => (
-                    <div key={i} className={`p-4 rounded-lg border flex flex-col md:flex-row justify-between gap-4 items-start ${brk.type.toLowerCase().includes('bull') ? 'bg-green-900/10 border-green-500/30' : brk.type.toLowerCase().includes('bear') ? 'bg-red-900/10 border-red-500/30' : 'bg-yellow-900/10 border-yellow-500/30'}`}>
-                      <div>
-                        <h5 className={`font-bold ${brk.type.toLowerCase().includes('bull') ? 'text-green-400' : brk.type.toLowerCase().includes('bear') ? 'text-red-400' : 'text-yellow-400'}`}>
-                          {brk.type} Detected
-                        </h5>
-                        <p className="text-sm text-gray-300 mt-1">{brk.note}</p>
-                      </div>
-                      <div className="text-right text-xs space-y-1">
-                        <p className="text-gray-400"><span className="font-semibold text-gray-300">Confirmation:</span> {brk.confirmation}</p>
-                        <p className="text-gray-400"><span className="font-semibold text-gray-300">Volume:</span> {brk.volumeBehavior}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Summary */}
-              <div className="bg-gray-800 p-4 rounded-lg border-l-4 border-indigo-500">
-                <p className="text-gray-300 text-sm leading-relaxed"><span className="text-indigo-400 font-bold">Trend Summary:</span> {data.autoTrendlines.summary}</p>
-              </div>
-
-            </div>
-          )}
-
-          {/* Pattern Recognition AI Section */}
-          {data && (
-             <div className="mt-8 pt-8 border-t border-gray-800">
-               <h3 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
-                 <span className="text-3xl">📈</span> Pattern Recognition AI
-               </h3>
-
-               {data.patterns && data.patterns.length > 0 ? (
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                   {data.patterns.map((pattern, idx) => (
-                     <div key={idx} className="bg-gradient-to-br from-gray-800 to-gray-900 border border-indigo-500/30 rounded-xl p-6 shadow-lg relative overflow-hidden group">
-                       {/* Decoration */}
-                       <div className="absolute top-0 right-0 w-20 h-20 bg-indigo-500/10 blur-3xl rounded-full group-hover:bg-indigo-500/20 transition-all"></div>
-
-                       <div className="flex justify-between items-start mb-4 relative z-10">
-                         <div>
-                           <h4 className="text-xl font-bold text-white">{pattern.name}</h4>
-                           <span className="text-xs text-indigo-300 font-mono">Confidence: {pattern.strength}/10</span>
-                         </div>
-                         <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${getRiskColor(pattern.riskLevel)}`}>
-                           {pattern.riskLevel} Risk
-                         </span>
-                       </div>
-
-                       <div className="space-y-3 mb-4 relative z-10">
-                         <div className="flex justify-between text-sm border-b border-gray-700/50 pb-2">
-                            <span className="text-gray-500">Confirmation</span>
-                            <span className="text-white font-mono">{pattern.confirmationLevel}</span>
-                         </div>
-                         <div className="flex justify-between text-sm border-b border-gray-700/50 pb-2">
-                            <span className="text-gray-500">Breakout/Down</span>
-                            <span className="text-yellow-400 font-mono font-bold">{pattern.breakoutPrice}</span>
-                         </div>
-                         <div className="text-sm">
-                            <span className="text-gray-500 block text-xs mb-1">Volume Behavior</span>
-                            <span className="text-gray-300">{pattern.volumeBehavior}</span>
-                         </div>
-                       </div>
-
-                       <div className="bg-black/20 p-3 rounded-lg text-sm text-gray-400 italic">
-                         "{pattern.explanation}"
-                       </div>
-                       
-                       {/* Strength Bar */}
-                       <div className="mt-4 h-1.5 w-full bg-gray-700 rounded-full overflow-hidden">
-                          <div 
-                            className="h-full bg-indigo-500 transition-all duration-1000" 
-                            style={{ width: `${pattern.strength * 10}%` }}
-                          ></div>
-                       </div>
-                     </div>
-                   ))}
-                 </div>
-               ) : (
-                 <div className="bg-gray-800/50 border border-gray-700 border-dashed rounded-xl p-8 text-center">
-                    <p className="text-gray-400 text-lg">No reliable chart patterns detected at this time.</p>
-                    <p className="text-gray-600 text-sm mt-2">The AI scans for confirmed setups (Flags, Cup & Handle, H&S) to avoid false positives.</p>
-                 </div>
-               )}
-             </div>
-          )}
-
-        </div>
+         ))}
       </div>
     </div>
   );

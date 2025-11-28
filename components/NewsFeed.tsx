@@ -4,8 +4,8 @@ import SourceList from './SourceList';
 import UniversalSortControl from './UniversalSortControl';
 import { fetchMarketNews } from '../services/geminiService';
 import { NewsFeedResult, NewsCategory, NewsItem, ScanStatus } from '../types';
-import { useGlobalRefresh } from '../contexts/GlobalRefreshContext';
 import { useSorter, SortConfig } from '../hooks/useSorter';
+import { useNavigation } from '../contexts/NavigationContext';
 
 interface NewsFeedProps {
   watchlist: string[];
@@ -16,7 +16,7 @@ const NewsFeed: React.FC<NewsFeedProps> = ({ watchlist }) => {
   const [status, setStatus] = useState<ScanStatus>(ScanStatus.IDLE);
   const [activeTab, setActiveTab] = useState<NewsCategory>('Breaking');
   const [error, setError] = useState<string | null>(null);
-  const { refreshTrigger } = useGlobalRefresh();
+  const { goToStockAnalysis } = useNavigation();
 
   // Helper to extract active list based on tab
   const getRawList = () => {
@@ -61,7 +61,6 @@ const NewsFeed: React.FC<NewsFeedProps> = ({ watchlist }) => {
   };
 
   useEffect(() => { fetchNews(); }, []);
-  useEffect(() => { if(refreshTrigger > 0) fetchNews(); }, [refreshTrigger]);
 
   const getSentimentBadge = (score: number) => {
     let color = 'bg-gray-700 text-gray-300';
@@ -92,7 +91,13 @@ const NewsFeed: React.FC<NewsFeedProps> = ({ watchlist }) => {
         <div className="flex justify-between items-start mb-2">
            <div className="flex flex-wrap gap-2 mb-2">
              {item.tickers?.map(t => (
-               <span key={t} className="bg-blue-900/30 text-blue-300 px-2 py-0.5 rounded text-xs font-mono font-bold border border-blue-500/30">{t}</span>
+               <button 
+                 key={t} 
+                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); goToStockAnalysis(t); }}
+                 className="bg-blue-900/30 text-blue-300 px-2 py-0.5 rounded text-xs font-mono font-bold border border-blue-500/30 hover:bg-blue-800 hover:text-white transition-colors"
+                >
+                 {t}
+               </button>
              ))}
              {getSentimentBadge(item.sentimentScore)}
            </div>

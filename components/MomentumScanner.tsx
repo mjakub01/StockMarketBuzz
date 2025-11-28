@@ -4,9 +4,8 @@ import ScannerHeader from './ScannerHeader';
 import StockCard from './StockCard';
 import SourceList from './SourceList';
 import UniversalSortControl from './UniversalSortControl';
-import { scanMarket, refreshStockQuotes } from '../services/geminiService';
-import { StockCandidate, ScanStatus, SearchSource } from '../types';
-import { useGlobalRefresh } from '../contexts/GlobalRefreshContext';
+import { scanMarket } from '../services/geminiService';
+import { StockCandidate, ScanStatus, SearchSource, ScannerFilters } from '../types';
 import { useSorter, SortConfig } from '../hooks/useSorter';
 
 type ViewMode = 'live' | 'pre' | 'post';
@@ -21,11 +20,19 @@ const MomentumScanner: React.FC = () => {
   const [isLive, setIsLive] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('live');
 
-  // Drag State (simplified for compatibility with new sort)
-  const [draggedSymbol, setDraggedSymbol] = useState<string | null>(null);
+  // Filter State
+  const [filters, setFilters] = useState<ScannerFilters>({
+    projVolume: true,
+    morningActive: false,
+    breakout: false,
+    highVolatility: true,
+    excludeDerivatives: true,
+    lowFloatRetail: false,
+    enableRoss: false
+  });
 
-  // Global Refresh Context
-  const { refreshTrigger, isAutoRefresh } = useGlobalRefresh();
+  // Drag State
+  const [draggedSymbol, setDraggedSymbol] = useState<string | null>(null);
 
   // Sorting Config
   const sortConfig: SortConfig<StockCandidate>[] = [
@@ -46,12 +53,17 @@ const MomentumScanner: React.FC = () => {
   const stocksRef = useRef(stocks);
   useEffect(() => { stocksRef.current = stocks; }, [stocks]);
 
+  const handleToggleFilter = (key: keyof ScannerFilters) => {
+    setFilters(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
   const handleScan = async () => {
     setStatus(ScanStatus.SCANNING);
     setError(null);
     setIsLive(false); 
     try {
-      const result = await scanMarket();
+      // Pass true to force refresh and the current filters
+      const result = await scanMarket(true, filters);
       setStocks(result.stocks);
       setMarketSummary(result.marketSummary);
       setSources(result.sources);
@@ -64,19 +76,6 @@ const MomentumScanner: React.FC = () => {
       setStatus(ScanStatus.ERROR);
     }
   };
-
-  useEffect(() => {
-    if (refreshTrigger > 0) {
-      if (status === ScanStatus.COMPLETE && stocksRef.current.length > 0) {
-        refreshStockQuotes(stocksRef.current).then(updated => {
-          setStocks(updated);
-          setLastUpdated(new Date());
-        });
-      } else {
-        handleScan();
-      }
-    }
-  }, [refreshTrigger]);
 
   // Handle Drop (Manual Reordering)
   const handleDrop = (e: React.DragEvent<HTMLDivElement>, targetSymbol: string) => {
@@ -93,14 +92,19 @@ const MomentumScanner: React.FC = () => {
     setDraggedSymbol(null);
   };
 
+  // Determine if we should show the content area
+  const showContent = stocks.length > 0 || (status === ScanStatus.COMPLETE && stocks.length === 0);
+
   return (
-    <div className="max-w-7xl mx-auto animate-fade-in pb-20">
+    <div className="max-w-7xl mx-auto animate-fade-in pb-20 relative">
       <ScannerHeader 
         onScan={handleScan} 
         status={status} 
         lastUpdated={lastUpdated}
-        isLive={isLive || isAutoRefresh}
+        isLive={isLive}
         onToggleLive={setIsLive}
+        filters={filters}
+        onToggleFilter={handleToggleFilter}
       />
 
       {error && (
@@ -112,68 +116,89 @@ const MomentumScanner: React.FC = () => {
         </div>
       )}
 
-      {status === ScanStatus.COMPLETE && (
-        <>
-          <div className="mb-6 bg-gray-900 border-l-4 border-blue-500 p-4 rounded-r-lg shadow-md flex flex-col md:flex-row justify-between gap-4">
-            <div className="flex-1">
-              <h2 className="text-lg font-bold text-white mb-2">Market Sentiment</h2>
-              <p className="text-gray-300 leading-relaxed">{marketSummary}</p>
-            </div>
-          </div>
-
-          <div className="mb-6 flex flex-col md:flex-row justify-between items-center gap-4">
-            <div className="bg-gray-800 p-1 rounded-lg inline-flex shadow-inner">
-               {(['live', 'pre', 'post'] as ViewMode[]).map(mode => (
-                 <button 
-                  key={mode}
-                  onClick={() => setViewMode(mode)}
-                  className={`px-4 py-1.5 rounded-md text-sm font-medium capitalize transition-all ${viewMode === mode ? 'bg-blue-600 text-white shadow' : 'text-gray-400 hover:text-white'}`}
-                 >
-                   {mode === 'live' ? 'Live' : mode === 'pre' ? 'Pre-Market' : 'After-Hours'}
-                 </button>
-               ))}
-            </div>
-
-            <UniversalSortControl 
-               activeKey={activeKey}
-               direction={direction}
-               options={sortConfig}
-               onSort={handleSort}
-            />
-          </div>
-
-          {sortedData.length === 0 ? (
-              <div className="text-center py-20 bg-gray-900/50 rounded-xl border border-gray-800 border-dashed">
-                <p className="text-gray-500 text-lg">No stocks found matching criteria.</p>
-              </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {sortedData.map((stock) => (
-                <StockCard 
-                  key={`${stock.symbol}`} 
-                  stock={stock} 
-                  viewMode={viewMode}
-                  draggable={true}
-                  onDragStart={(e) => setDraggedSymbol(stock.symbol)}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => handleDrop(e, stock.symbol)}
-                />
-              ))}
+      {showContent && (
+        <div className="relative min-h-[300px]">
+          {/* Loading Overlay for Refresh */}
+          {status === ScanStatus.SCANNING && (
+            <div className="absolute inset-0 z-20 bg-gray-900/60 backdrop-blur-sm rounded-xl flex items-center justify-center transition-all duration-300">
+               <div className="flex flex-col items-center p-6 bg-gray-800 border border-gray-700 rounded-2xl shadow-2xl transform scale-110">
+                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500 mb-3 shadow-[0_0_15px_rgba(59,130,246,0.5)]"></div>
+                  <p className="text-blue-400 font-bold text-xs tracking-widest animate-pulse">UPDATING MARKET DATA...</p>
+               </div>
             </div>
           )}
-          
-          <SourceList sources={sources} />
-        </>
+
+          <div className={`transition-all duration-500 ${status === ScanStatus.SCANNING ? 'opacity-30 blur-[1px] grayscale-[50%]' : 'opacity-100'}`}>
+            <div className="mb-6 bg-gray-900 border-l-4 border-blue-500 p-4 rounded-r-lg shadow-md flex flex-col md:flex-row justify-between gap-4">
+              <div className="flex-1">
+                <h2 className="text-lg font-bold text-white mb-2">Market Sentiment</h2>
+                <p className="text-gray-300 leading-relaxed">{marketSummary}</p>
+              </div>
+            </div>
+
+            <div className="mb-6 flex flex-col md:flex-row justify-between items-center gap-4">
+              <div className="bg-gray-800 p-1 rounded-lg inline-flex shadow-inner">
+                {(['live', 'pre', 'post'] as ViewMode[]).map(mode => (
+                  <button 
+                    key={mode}
+                    onClick={() => setViewMode(mode)}
+                    className={`px-4 py-1.5 rounded-md text-sm font-medium capitalize transition-all ${viewMode === mode ? 'bg-blue-600 text-white shadow' : 'text-gray-400 hover:text-white'}`}
+                  >
+                    {mode === 'live' ? 'Live' : mode === 'pre' ? 'Pre-Market' : 'After-Hours'}
+                  </button>
+                ))}
+              </div>
+
+              <UniversalSortControl 
+                activeKey={activeKey}
+                direction={direction}
+                options={sortConfig}
+                onSort={handleSort}
+              />
+            </div>
+
+            {sortedData.length === 0 ? (
+                <div className="text-center py-20 bg-gray-900/50 rounded-xl border border-gray-800 border-dashed">
+                  <p className="text-gray-500 text-lg">No stocks found matching criteria.</p>
+                </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {sortedData.map((stock) => (
+                  <StockCard 
+                    key={`${stock.symbol}`} 
+                    stock={stock} 
+                    viewMode={viewMode}
+                    draggable={true}
+                    onDragStart={(e) => setDraggedSymbol(stock.symbol)}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => handleDrop(e, stock.symbol)}
+                  />
+                ))}
+              </div>
+            )}
+            
+            <SourceList sources={sources} />
+          </div>
+        </div>
       )}
 
-      {status === ScanStatus.IDLE && (
-          <div className="flex flex-col items-center justify-center py-24 text-gray-600">
-            <div className="w-24 h-24 mb-6 rounded-full bg-gray-900 flex items-center justify-center shadow-inner">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      {status === ScanStatus.IDLE && stocks.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-24 text-gray-600 animate-fade-in">
+            <div className="w-24 h-24 mb-6 rounded-full bg-gray-900 flex items-center justify-center shadow-inner group">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-gray-700 group-hover:text-blue-500 transition-colors duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
             <p className="text-xl font-medium">Ready to scan the market</p>
+            <p className="text-sm text-gray-500 mt-2">Configure filters and click "Full Scan"</p>
+          </div>
+      )}
+
+      {status === ScanStatus.SCANNING && stocks.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-24 text-gray-600">
+             <div className="animate-spin rounded-full h-14 w-14 border-b-2 border-blue-500 mb-6 shadow-[0_0_20px_rgba(59,130,246,0.4)]"></div>
+             <p className="text-xl font-bold text-white animate-pulse tracking-wide">SCANNING MARKET...</p>
+             <p className="text-sm text-gray-500 mt-2">Applying filters: {Object.entries(filters).filter(([k,v]) => v).map(([k]) => k).join(', ')}</p>
           </div>
       )}
     </div>

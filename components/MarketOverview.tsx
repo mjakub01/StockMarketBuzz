@@ -4,15 +4,15 @@ import HeatmapScanner from './HeatmapScanner';
 import MarketMoversScanner from './MarketMoversScanner';
 import NewsFeed from './NewsFeed';
 import StockCard from './StockCard';
-import { fetchMarketIndices, fetchEconomicCalendar, fetchTopGainersLosers, fetchDailyMarketSummary, fetchCryptoMovers } from '../services/geminiService';
-import { MarketIndex, EconomicEvent, GainersLosersResult, DailyMarketSummary, CryptoCandidate } from '../types';
-import { useGlobalRefresh } from '../contexts/GlobalRefreshContext';
+import { fetchMarketIndices, fetchEconomicCalendar, fetchTopGainersLosers, fetchDailyMarketSummary } from '../services/geminiService';
+import { MarketIndex, EconomicEvent, GainersLosersResult, DailyMarketSummary } from '../types';
+import { useSystem } from '../contexts/SystemContext';
 
 interface MarketOverviewProps {}
 
 const MarketOverview: React.FC<MarketOverviewProps> = () => {
   const [activeSection, setActiveSection] = useState<string | null>(null);
-  const { refreshTrigger } = useGlobalRefresh();
+  const { features } = useSystem();
 
   // --- Sub-Screen Components ---
 
@@ -23,7 +23,6 @@ const MarketOverview: React.FC<MarketOverviewProps> = () => {
     const loadData = () => fetchMarketIndices().then(setIndices).finally(() => setLoading(false));
 
     useEffect(() => { loadData(); }, []);
-    useEffect(() => { if(refreshTrigger > 0) loadData(); }, [refreshTrigger]);
 
     if (loading) return (
       <div className="flex flex-col items-center justify-center h-64 text-gray-400">
@@ -34,31 +33,38 @@ const MarketOverview: React.FC<MarketOverviewProps> = () => {
 
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 animate-fade-in-up">
-        {indices.map((idx) => (
-          <div key={idx.symbol} className="bg-gray-900/40 backdrop-blur-xl p-6 rounded-2xl border border-white/5 shadow-lg hover:shadow-[0_0_20px_rgba(59,130,246,0.15)] transition-all duration-300 group hover:-translate-y-1">
-            <div className="flex justify-between items-center mb-4">
-              <div className="flex items-center gap-3">
-                 <div className="w-10 h-10 rounded-xl bg-gray-800 flex items-center justify-center text-lg font-bold text-gray-300 group-hover:bg-blue-600 group-hover:text-white transition-all shadow-inner">
-                    {idx.symbol[0]}
-                 </div>
-                 <div>
-                    <h3 className="text-lg font-bold text-white leading-none tracking-tight">{idx.symbol}</h3>
-                    <p className="text-[10px] text-gray-400 uppercase tracking-wider mt-1">{idx.name}</p>
-                 </div>
+        {indices?.map((idx) => {
+          // FIX: Convert to string safely
+          const changeStr = String(idx.changePercent || '');
+          const isNeg = changeStr.includes('-');
+          const symbolStr = typeof idx.symbol === 'string' ? idx.symbol : 'UNK';
+
+          return (
+            <div key={symbolStr || Math.random()} className="bg-gray-900/40 backdrop-blur-xl p-6 rounded-2xl border border-white/5 shadow-lg hover:shadow-[0_0_20px_rgba(59,130,246,0.15)] transition-all duration-300 group hover:-translate-y-1">
+              <div className="flex justify-between items-center mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-gray-800 flex items-center justify-center text-lg font-bold text-gray-300 group-hover:bg-blue-600 group-hover:text-white transition-all shadow-inner">
+                      {symbolStr[0] || '?'}
+                  </div>
+                  <div>
+                      <h3 className="text-lg font-bold text-white leading-none tracking-tight">{symbolStr}</h3>
+                      <p className="text-[10px] text-gray-400 uppercase tracking-wider mt-1">{typeof idx.name === 'string' ? idx.name : ''}</p>
+                  </div>
+                </div>
+                <span className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider border ${idx.sentiment === 'Bullish' ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'}`}>
+                  {typeof idx.sentiment === 'string' ? idx.sentiment : 'Neutral'}
+                </span>
               </div>
-              <span className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider border ${idx.sentiment === 'Bullish' ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'}`}>
-                {idx.sentiment}
-              </span>
+              <div className="text-3xl font-mono font-bold text-white mb-2 tracking-tighter drop-shadow-md">{typeof idx.price === 'string' ? idx.price : '-'}</div>
+              <div className={`flex items-center gap-2 text-sm font-bold ${isNeg ? 'text-red-400' : 'text-green-400'}`}>
+                <span className={`px-2 py-0.5 rounded text-xs ${isNeg ? 'bg-red-500/10' : 'bg-green-500/10'}`}>
+                  {changeStr}
+                </span>
+                <span>{typeof idx.change === 'string' ? idx.change : '0.00'}</span>
+              </div>
             </div>
-            <div className="text-3xl font-mono font-bold text-white mb-2 tracking-tighter drop-shadow-md">{idx.price}</div>
-            <div className={`flex items-center gap-2 text-sm font-bold ${idx.changePercent.includes('-') ? 'text-red-400' : 'text-green-400'}`}>
-              <span className={`px-2 py-0.5 rounded text-xs ${idx.changePercent.includes('-') ? 'bg-red-500/10' : 'bg-green-500/10'}`}>
-                {idx.changePercent}
-              </span>
-              <span>{idx.change}</span>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     );
   };
@@ -70,7 +76,6 @@ const MarketOverview: React.FC<MarketOverviewProps> = () => {
     const loadData = () => fetchTopGainersLosers().then(setData).finally(() => setLoading(false));
 
     useEffect(() => { loadData(); }, []);
-    useEffect(() => { if(refreshTrigger > 0) loadData(); }, [refreshTrigger]);
 
     if (loading) return (
       <div className="flex flex-col items-center justify-center h-64 text-gray-400">
@@ -94,7 +99,7 @@ const MarketOverview: React.FC<MarketOverviewProps> = () => {
              </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {data?.gainers.map((s, i) => <StockCard key={i} stock={s} percentLabel="Gain" />)}
+            {data?.gainers ? data.gainers.map((s, i) => <StockCard key={i} stock={s} percentLabel="Gain" />) : <p className="text-gray-500 col-span-4 text-center">No gainers data</p>}
           </div>
         </div>
 
@@ -111,7 +116,7 @@ const MarketOverview: React.FC<MarketOverviewProps> = () => {
              </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {data?.losers.map((s, i) => <StockCard key={i} stock={s} percentLabel="Loss" />)}
+            {data?.losers ? data.losers.map((s, i) => <StockCard key={i} stock={s} percentLabel="Loss" />) : <p className="text-gray-500 col-span-4 text-center">No losers data</p>}
           </div>
         </div>
       </div>
@@ -125,7 +130,6 @@ const MarketOverview: React.FC<MarketOverviewProps> = () => {
     const loadData = () => fetchDailyMarketSummary().then(setData).finally(() => setLoading(false));
 
     useEffect(() => { loadData(); }, []);
-    useEffect(() => { if(refreshTrigger > 0) loadData(); }, [refreshTrigger]);
 
     if (loading) return (
        <div className="flex flex-col items-center justify-center h-64 text-gray-400">
@@ -133,6 +137,20 @@ const MarketOverview: React.FC<MarketOverviewProps> = () => {
           <p className="animate-pulse font-mono text-sm tracking-wider">ANALYZING MARKET DATA...</p>
        </div>
     );
+
+    if (!data || typeof data === 'string') {
+        return (
+            <div className="flex flex-col items-center justify-center h-64 text-gray-400 bg-gray-900/30 rounded-3xl border border-gray-800">
+                <p className="font-mono text-sm tracking-wider">AI ANALYSIS UNAVAILABLE</p>
+            </div>
+        );
+    }
+
+    // Safe Render Logic: Ensure summary is a string, if object (due to malformed AI response), stringify it
+    const safeSummary = typeof data.summary === 'string' ? data.summary : "Summary data unavailable.";
+    
+    // Ensure Key Points are array of strings
+    const safePoints = Array.isArray(data.keyPoints) ? data.keyPoints : [];
 
     return (
       <div className="max-w-4xl mx-auto animate-fade-in-up">
@@ -156,14 +174,14 @@ const MarketOverview: React.FC<MarketOverviewProps> = () => {
                  <span className="text-gray-400 text-xs uppercase font-bold tracking-wider">Overall Sentiment</span>
                  <span className={`px-4 py-1.5 rounded-lg text-sm font-bold shadow-lg flex items-center gap-2 ${data?.sentiment === 'Bullish' ? 'bg-green-500/20 text-green-400 border border-green-500/30' : data?.sentiment === 'Bearish' ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-gray-600/20 text-gray-300 border border-gray-600/30'}`}>
                     <span className={`w-2 h-2 rounded-full ${data?.sentiment === 'Bullish' ? 'bg-green-400' : data?.sentiment === 'Bearish' ? 'bg-red-400' : 'bg-gray-400'} animate-pulse`}></span>
-                    {data?.sentiment}
+                    {typeof data?.sentiment === 'string' ? data.sentiment : 'Neutral'}
                  </span>
               </div>
 
               <div className="bg-gray-800/40 backdrop-blur-sm rounded-2xl p-8 mb-8 border border-white/5 relative">
                  <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-indigo-500 to-blue-500 rounded-l-2xl"></div>
                  <p className="text-gray-200 text-lg leading-relaxed font-light tracking-wide">
-                    {data?.summary}
+                    {safeSummary}
                  </p>
               </div>
 
@@ -171,10 +189,12 @@ const MarketOverview: React.FC<MarketOverviewProps> = () => {
                  <span className="text-indigo-400">//</span> Key Takeaways
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                 {data?.keyPoints.map((kp, i) => (
+                 {safePoints.map((kp, i) => (
                     <div key={i} className="flex items-start gap-4 p-5 bg-gray-800/30 rounded-xl border border-white/5 hover:bg-gray-800/50 transition-colors">
                        <span className="text-indigo-400 font-bold mt-0.5">0{i+1}</span>
-                       <span className="text-gray-300 text-sm font-medium leading-relaxed">{kp}</span>
+                       <span className="text-gray-300 text-sm font-medium leading-relaxed">
+                          {typeof kp === 'string' ? kp : JSON.stringify(kp)}
+                       </span>
                     </div>
                  ))}
               </div>
@@ -191,7 +211,6 @@ const MarketOverview: React.FC<MarketOverviewProps> = () => {
     const loadData = () => fetchEconomicCalendar().then(setEvents).finally(() => setLoading(false));
 
     useEffect(() => { loadData(); }, []);
-    useEffect(() => { if(refreshTrigger > 0) loadData(); }, [refreshTrigger]);
 
     if (loading) return (
        <div className="flex flex-col items-center justify-center h-64 text-gray-400">
@@ -221,7 +240,7 @@ const MarketOverview: React.FC<MarketOverviewProps> = () => {
                  </tr>
               </thead>
               <tbody className="divide-y divide-gray-800">
-                 {events.map((evt, i) => (
+                 {events?.map((evt, i) => (
                     <tr key={i} className="hover:bg-white/5 transition-colors group">
                        <td className="p-6 text-white font-mono text-sm group-hover:text-blue-300 transition-colors">{evt.time}</td>
                        <td className="p-6 text-gray-200 font-medium">{evt.event}</td>
@@ -241,81 +260,14 @@ const MarketOverview: React.FC<MarketOverviewProps> = () => {
     );
   };
 
-  const CryptoView = () => {
-      const [coins, setCoins] = useState<CryptoCandidate[]>([]);
-      const [loading, setLoading] = useState(true);
-
-      const loadData = () => fetchCryptoMovers().then(setCoins).finally(() => setLoading(false));
-  
-      useEffect(() => { loadData(); }, []);
-      useEffect(() => { if(refreshTrigger > 0) loadData(); }, [refreshTrigger]);
-  
-      if (loading) return (
-         <div className="flex flex-col items-center justify-center h-64 text-gray-400">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-500 mb-4 shadow-[0_0_15px_rgba(234,197,8,0.5)]"></div>
-            <p className="animate-pulse font-mono text-sm tracking-wider">LOADING CRYPTO MARKETS...</p>
-         </div>
-      );
-  
-      return (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 animate-fade-in-up">
-          {coins.map((coin, i) => (
-            <div key={i} className="bg-gray-900/60 backdrop-blur-md rounded-2xl border border-white/5 p-6 shadow-lg hover:border-yellow-500/30 hover:shadow-[0_0_20px_rgba(234,179,8,0.1)] transition-all duration-300 group hover:-translate-y-1">
-               <div className="flex justify-between items-start mb-6">
-                  <div className="flex items-center gap-3">
-                     <div className="w-12 h-12 rounded-xl bg-yellow-500/10 flex items-center justify-center text-2xl border border-yellow-500/20">🪙</div>
-                     <div>
-                        <h3 className="text-white font-bold tracking-tight text-lg">{coin.symbol}</h3>
-                        <p className="text-[10px] text-gray-500 uppercase tracking-widest">{coin.name}</p>
-                     </div>
-                  </div>
-                  <span className={`text-sm font-bold px-2 py-1 rounded bg-black/30 ${coin.change24h.includes('-') ? 'text-red-400' : 'text-green-400'}`}>
-                     {coin.change24h}
-                  </span>
-               </div>
-               <div className="text-2xl font-mono font-bold text-white mb-2 tracking-tighter">{coin.price}</div>
-               <div className="flex justify-between items-end border-t border-white/5 pt-3 mt-2">
-                  <span className="text-[10px] text-gray-500 uppercase font-bold">Volume (24h)</span>
-                  <span className="text-gray-300 font-mono text-sm">{coin.volume}</span>
-               </div>
-            </div>
-          ))}
-        </div>
-      );
-  };
-
-  const OptionsView = () => {
-     return (
-        <div className="max-w-3xl mx-auto text-center py-24 animate-fade-in-up">
-           <div className="inline-block p-1 rounded-full bg-gradient-to-br from-pink-500 to-rose-600 mb-8 shadow-[0_0_50px_rgba(236,72,153,0.3)]">
-              <div className="p-8 rounded-full bg-gray-900 border border-gray-700 relative overflow-hidden">
-                 <div className="absolute inset-0 bg-gradient-to-tr from-pink-500/10 to-transparent"></div>
-                 <svg xmlns="http://www.w3.org/2000/svg" className="h-20 w-20 text-white relative z-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                 </svg>
-              </div>
-           </div>
-           <h2 className="text-4xl font-extrabold text-white mb-4 tracking-tight">Institutional <span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-rose-500">Flow</span></h2>
-           <p className="text-gray-400 text-lg mb-10 max-w-lg mx-auto leading-relaxed">
-              Unlock real-time Options Flow, Dark Pool Prints, and Whale Activity. See where the smart money is positioning.
-           </p>
-           <button className="px-10 py-4 bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white rounded-2xl font-bold text-lg shadow-[0_0_30px_rgba(236,72,153,0.4)] transition-all transform hover:scale-105 active:scale-95 border border-white/10">
-              Unlock Pro Access
-           </button>
-        </div>
-     );
-  };
-
   const buttons = [
-    { id: 'indices', title: 'Market Indices', subtitle: 'SPY, QQQ, DIA, IWM', icon: '📊', color: 'from-blue-600 to-indigo-600', shadow: 'shadow-blue-500/20' },
-    { id: 'sectors', title: 'Sector Heatmap', subtitle: 'Live Sector Rotation', icon: '📈', color: 'from-emerald-500 to-teal-600', shadow: 'shadow-teal-500/20' },
-    { id: 'gainers', title: 'Top Gainers', subtitle: 'Daily Extremes', icon: '🚀', color: 'from-green-500 to-emerald-600', shadow: 'shadow-green-500/20' },
-    { id: 'movers', title: 'Market Movers', subtitle: 'Volume & Momentum', icon: '🔥', color: 'from-orange-500 to-red-600', shadow: 'shadow-orange-500/20' },
-    { id: 'ai', title: 'AI Summary', subtitle: 'Daily Intelligence', icon: '🤖', color: 'from-indigo-600 to-violet-600', shadow: 'shadow-indigo-500/20' },
-    { id: 'news', title: 'News Briefing', subtitle: 'Curated Headlines', icon: '📰', color: 'from-purple-500 to-fuchsia-600', shadow: 'shadow-purple-500/20' },
-    { id: 'calendar', title: 'Eco. Calendar', subtitle: 'Key Macro Events', icon: '📅', color: 'from-slate-500 to-slate-700', shadow: 'shadow-slate-500/20' },
-    { id: 'options', title: 'Options Flow', subtitle: 'Whale Activity', icon: '💰', color: 'from-pink-500 to-rose-600', shadow: 'shadow-pink-500/20', badge: 'PREMIUM' },
-    { id: 'crypto', title: 'Crypto Movers', subtitle: 'BTC, ETH & Alts', icon: '🪙', color: 'from-yellow-500 to-amber-600', shadow: 'shadow-yellow-500/20' },
+    { id: 'indices', title: 'Market Indices', subtitle: 'SPY, QQQ, DIA, IWM', icon: '📊', color: 'from-blue-600 to-indigo-600', shadow: 'shadow-blue-500/20', enabled: true },
+    { id: 'sectors', title: 'Sector Heatmap', subtitle: 'Live Sector Rotation', icon: '📈', color: 'from-emerald-500 to-teal-600', shadow: 'shadow-teal-500/20', enabled: features.enableHeatmaps },
+    { id: 'gainers', title: 'Top Gainers', subtitle: 'Daily Extremes', icon: '🚀', color: 'from-green-500 to-emerald-600', shadow: 'shadow-green-500/20', enabled: features.enableMomentum },
+    { id: 'movers', title: 'Market Movers', subtitle: 'Volume & Momentum', icon: '🔥', color: 'from-orange-500 to-red-600', shadow: 'shadow-orange-500/20', enabled: features.enableMovers },
+    { id: 'ai', title: 'AI Summary', subtitle: 'Daily Intelligence', icon: '🤖', color: 'from-indigo-600 to-violet-600', shadow: 'shadow-indigo-500/20', enabled: true },
+    { id: 'news', title: 'News Briefing', subtitle: 'Curated Headlines', icon: '📰', color: 'from-purple-500 to-fuchsia-600', shadow: 'shadow-purple-500/20', enabled: features.enableNews },
+    { id: 'calendar', title: 'Eco. Calendar', subtitle: 'Key Macro Events', icon: '📅', color: 'from-slate-500 to-slate-700', shadow: 'shadow-slate-500/20', enabled: true },
   ];
 
   // --- Main Render ---
@@ -347,8 +299,6 @@ const MarketOverview: React.FC<MarketOverviewProps> = () => {
         {activeSection === 'ai' && <AIView />}
         {activeSection === 'news' && <NewsFeed watchlist={[]} />}
         {activeSection === 'calendar' && <CalendarView />}
-        {activeSection === 'options' && <OptionsView />}
-        {activeSection === 'crypto' && <CryptoView />}
       </div>
     );
   }
@@ -371,41 +321,54 @@ const MarketOverview: React.FC<MarketOverviewProps> = () => {
         {buttons.map(btn => (
           <button
             key={btn.id}
-            onClick={() => setActiveSection(btn.id)}
-            className={`group relative h-48 rounded-[2rem] overflow-hidden bg-gray-900 border border-white/5 hover:border-white/20 transition-all duration-500 hover:-translate-y-2 hover:shadow-2xl ${btn.shadow}`}
+            onClick={() => btn.enabled && setActiveSection(btn.id)}
+            disabled={!btn.enabled}
+            className={`group relative h-48 rounded-[2rem] overflow-hidden bg-gray-900 border transition-all duration-500
+              ${btn.enabled 
+                ? `border-white/5 hover:border-white/20 hover:-translate-y-2 hover:shadow-2xl ${btn.shadow} cursor-pointer` 
+                : 'border-gray-800 opacity-40 cursor-not-allowed grayscale'}
+            `}
           >
             {/* Background Gradient on Hover */}
-            <div className={`absolute inset-0 bg-gradient-to-br ${btn.color} opacity-0 group-hover:opacity-10 transition-opacity duration-500`}></div>
+            {btn.enabled && (
+              <div className={`absolute inset-0 bg-gradient-to-br ${btn.color} opacity-0 group-hover:opacity-10 transition-opacity duration-500`}></div>
+            )}
             
             {/* Glow Effect */}
-            <div className={`absolute -right-12 -bottom-12 w-40 h-40 bg-gradient-to-br ${btn.color} blur-[60px] opacity-20 group-hover:opacity-40 transition-opacity duration-500`}></div>
+            {btn.enabled && (
+              <div className={`absolute -right-12 -bottom-12 w-40 h-40 bg-gradient-to-br ${btn.color} blur-[60px] opacity-20 group-hover:opacity-40 transition-opacity duration-500`}></div>
+            )}
 
             <div className="relative z-10 p-8 h-full flex flex-col justify-between items-start">
                <div className="flex justify-between w-full items-start">
-                  <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-3xl shadow-lg bg-gradient-to-br ${btn.color} text-white border border-white/10 group-hover:scale-110 transition-transform duration-500`}>
+                  <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-3xl shadow-lg border border-white/10 transition-transform duration-500
+                    ${btn.enabled ? `bg-gradient-to-br ${btn.color} text-white group-hover:scale-110` : 'bg-gray-800 text-gray-500'}
+                  `}>
                      {btn.icon}
                   </div>
-                  {btn.badge && (
-                     <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-black/40 text-white border border-white/10 tracking-widest backdrop-blur-sm">
-                        {btn.badge}
+                  {!btn.enabled && (
+                     <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-gray-800 text-gray-400 border border-gray-700 tracking-widest backdrop-blur-sm">
+                        DISABLED
                      </span>
                   )}
                </div>
 
                <div>
-                  <h3 className="text-2xl font-bold text-white mb-1 group-hover:text-white transition-colors tracking-tight">{btn.title}</h3>
-                  <p className="text-sm text-gray-500 font-medium group-hover:text-gray-300 transition-colors uppercase tracking-wider">{btn.subtitle}</p>
+                  <h3 className={`text-2xl font-bold mb-1 transition-colors tracking-tight ${btn.enabled ? 'text-white group-hover:text-white' : 'text-gray-500'}`}>{btn.title}</h3>
+                  <p className={`text-sm font-medium transition-colors uppercase tracking-wider ${btn.enabled ? 'text-gray-500 group-hover:text-gray-300' : 'text-gray-600'}`}>{btn.subtitle}</p>
                </div>
             </div>
             
             {/* Arrow Icon */}
-            <div className="absolute top-8 right-8 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-4 group-hover:translate-x-0">
-               <div className="p-2 rounded-full bg-white/10 backdrop-blur-md">
-                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                 </svg>
-               </div>
-            </div>
+            {btn.enabled && (
+              <div className="absolute top-8 right-8 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-4 group-hover:translate-x-0">
+                 <div className="p-2 rounded-full bg-white/10 backdrop-blur-md">
+                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                   </svg>
+                 </div>
+              </div>
+            )}
           </button>
         ))}
       </div>

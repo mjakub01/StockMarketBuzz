@@ -21,11 +21,19 @@ export interface MarketMover {
   companyName: string;
   currentPrice: string;
   priceMovement: string;
-  volumeChange: string;
+  volumeChange: string; // Used for RVOL
   marketSentiment: number; // 1-10
   keyCatalyst: string;
   technicalMomentum: 'Bullish' | 'Neutral' | 'Bearish';
   whyItsHot: string;
+  volume?: string; // Raw volume
+  float?: string;
+  marketCap?: string;
+}
+
+export interface MarketMoversFilters {
+  mode: 'ALL' | 'GAINERS' | 'LOSERS';
+  cap: 'ALL' | 'SMALL' | 'MID' | 'LARGE';
 }
 
 export interface OversoldCandidate {
@@ -160,72 +168,52 @@ export interface ScreenshotAnalysisResult {
   suggestions?: string;
 }
 
-export interface SupportResistanceLevel {
-  price: string;
-  type: 'Major Support' | 'Minor Support' | 'Major Resistance' | 'Minor Resistance';
-  description: string; 
+// --- NEW SMART CHART TYPES ---
+export interface OHLC {
+  time: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  rsi?: number;
+  macd?: number;
+  macdSignal?: number;
+  macdHist?: number;
 }
 
-export interface Zone {
-  range: string;
-  strength: number; 
+export interface ChartOverlay {
+  type: 'SMA' | 'EMA' | 'Support' | 'Resistance' | 'Pattern' | 'Breakout' | 'Breakdown';
+  label: string;
+  color: string;
+  points?: { index: number; price: number }[]; // For lines/patterns
+  yValue?: number; // For horizontal levels
+  strength?: 'Major' | 'Minor';
+  testCount?: number;
+  method?: string; // e.g. "Volume Node", "Swing High"
 }
 
-export interface Trendline {
-  start: string;
-  end: string;
-  description: string;
-}
-
-export interface ChartPattern {
-  name: string;
-  confirmationLevel: string;
-  breakoutPrice: string;
-  strength: number; 
-  volumeBehavior: string;
-  riskLevel: 'Low' | 'Medium' | 'High';
-  explanation: string;
-}
-
-export interface TrendlineDetail {
-  start: string;
-  end: string;
-  touches: number;
-  strength: number; 
-  notes: string;
-}
-
-export interface BreakRetest {
-  type: string;
-  confirmation: string;
-  volumeBehavior: string;
-  note: string;
-}
-
-export interface AutoTrendlineAnalysis {
-  uptrends: TrendlineDetail[];
-  downtrends: TrendlineDetail[];
-  breaks: BreakRetest[];
-  summary: string;
-}
-
-export interface StockTechnicalAnalysis {
-  symbol: string;
-  currentPrice: string;
-  trendStrength: 'Strong Bullish' | 'Bullish' | 'Neutral' | 'Bearish' | 'Strong Bearish';
-  volatilityLevel: 'Low' | 'Medium' | 'High';
-  supportLevels: SupportResistanceLevel[];
-  resistanceLevels: SupportResistanceLevel[];
-  recentCatalyst: string;
-  summary: string;
-  heatZones?: { zone: string; description: string }[];
-  supplyZones?: Zone[];
-  demandZones?: Zone[];
-  trendlines?: { uptrend?: string; downtrend?: string; recentBreak?: boolean }; 
-  fibonacciLevels?: { level38: string; level50: string; level61: string; confluence: string };
-  volumeProfile?: { poc: string; hvn: string; lvn: string; gap: string };
-  patterns?: ChartPattern[];
-  autoTrendlines?: AutoTrendlineAnalysis;
+export interface StockAnalysisFull {
+    symbol: string;
+    companyName: string;
+    price: number;
+    change: number;
+    changePercent: number;
+    candles: OHLC[];
+    overlays: ChartOverlay[];
+    fundamentals: {
+        marketCap: string;
+        float: string;
+        peRatio: string;
+        avgVolume: string;
+    };
+    technicals: {
+        rsi: number;
+        macd: string;
+        summary: string;
+        trend: 'Bullish' | 'Bearish' | 'Neutral';
+    };
+    news: { headline: string; source: string; time: string; sentiment: 'Positive' | 'Negative' | 'Neutral' }[];
 }
 
 export type NewsCategory = 'Breaking' | 'Watchlist' | 'Macro' | 'Trending' | 'Earnings' | 'Analyst' | 'Company';
@@ -274,7 +262,13 @@ export interface EconomicEvent {
   actual?: string;
   forecast?: string;
   previous?: string;
+  country?: string; 
+  category?: string;
+  description?: string;
+  relatedAssets?: string[];
 }
+
+export type CalendarDateRange = 'Yesterday' | 'Today' | 'Tomorrow' | 'This Week' | 'Next Week';
 
 export interface CryptoCandidate {
   symbol: string;
@@ -316,4 +310,73 @@ export interface ThemeSettings {
   fontSize: 'small' | 'medium' | 'large' | 'xl';
   cornerStyle: CornerStyle;
   animationSpeed: AnimationSpeed;
+}
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: 'admin' | 'user';
+  createdAt: string;
+}
+
+export interface FeatureFlags {
+  enableMomentum: boolean;
+  enableEarnings: boolean;
+  enableMovers: boolean;
+  enableOversold: boolean;
+  enableInsider: boolean;
+  enableHeatmaps: boolean;
+  enableNews: boolean;
+  enableGlobalRefresh: boolean;
+  enableCrypto: boolean;
+}
+
+export interface ScannerFilters {
+  projVolume: boolean; // Volume > 25M (Projected)
+  morningActive: boolean; // Active 7-11 AM
+  breakout: boolean; // Above HOD
+  highVolatility: boolean; // High Range
+  excludeDerivatives: boolean; // No ETFs/SPACs
+  lowFloatRetail: boolean; // Inst Own < 30%
+  enableRoss: boolean; // Ross Cameron 5-Step System
+}
+
+export interface EarningsFilters {
+  epsBeat: boolean;
+  revBeat: boolean;
+  move5Percent: boolean;
+  vol5M: boolean;
+  rvol2x: boolean;
+  priceRange: boolean; // $2-$100
+  session: 'ALL' | 'PRE' | 'POST';
+  sector: string; // 'ALL' or specific
+}
+
+// --- AI CHAT TYPES ---
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: Date;
+  isTyping?: boolean;
+}
+
+// --- API CONNECTION TYPES ---
+export type ApiProviderId = 'gemini' | 'polygon' | 'alphaVantage' | 'finnhub' | 'iex';
+
+export interface ApiProviderConfig {
+  id: ApiProviderId;
+  name: string;
+  description: string;
+  icon: string;
+  website: string;
+}
+
+export interface ApiKeyConfig {
+  providerId: ApiProviderId;
+  apiKey: string;
+  isEnabled: boolean;
+  status: 'valid' | 'invalid' | 'checking' | 'unknown';
+  lastTested?: string;
 }

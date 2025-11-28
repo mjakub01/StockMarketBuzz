@@ -1,27 +1,22 @@
 
 import React, { useState, useEffect } from 'react';
 import { fetchWatchlistQuotes } from '../services/geminiService';
-import { Watchlist, WatchlistItem } from '../types';
+import { WatchlistItem } from '../types';
 import StockDetailView from './StockDetailView';
-import ScreenshotImporter from './ScreenshotImporter';
-import { useGlobalRefresh } from '../contexts/GlobalRefreshContext';
+import { useStockAnalysis } from '../contexts/StockAnalysisContext';
 
 interface WatchlistViewProps {
-  watchlists: Watchlist[];
-  activeWatchlistId: string;
-  setActiveWatchlistId: (id: string) => void;
-  setWatchlists: (lists: Watchlist[]) => void;
+  currentTicker: string | null;
+  onTickerChange: (ticker: string) => void;
 }
 
-// Reusable Stand-Alone Tooltip Component with Portal-like positioning (fixed) to escape overflow
+// Reusable Stand-Alone Tooltip Component
 const TooltipIcon: React.FC<{ icon: React.ReactNode; tooltip: string; colorClass?: string }> = ({ icon, tooltip, colorClass = "" }) => {
   return (
     <div className="group relative flex items-center justify-center">
       <div className={`text-lg md:text-xl transition-colors cursor-help ${colorClass}`}>
         {icon}
       </div>
-      
-      {/* Fixed position tooltip to avoid clipping in overflow containers */}
       <div className="fixed opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-[9999] bg-gray-900 text-white text-sm font-medium rounded-xl shadow-2xl border border-gray-600 px-4 py-2 min-w-max bottom-auto top-auto transform -translate-x-1/2 mt-2 ml-4 md:ml-0" style={{ marginTop: '20px' }}>
          <div className="absolute -top-2 left-1/2 -translate-x-1/2 border-8 border-transparent border-b-gray-900"></div>
          {tooltip}
@@ -30,386 +25,210 @@ const TooltipIcon: React.FC<{ icon: React.ReactNode; tooltip: string; colorClass
   );
 };
 
-const WatchlistView: React.FC<WatchlistViewProps> = ({ watchlists, activeWatchlistId, setActiveWatchlistId, setWatchlists }) => {
-  const [items, setItems] = useState<WatchlistItem[]>([]);
-  const [loading, setLoading] = useState(false);
+const WatchlistView: React.FC<WatchlistViewProps> = ({ currentTicker, onTickerChange }) => {
   const [tickerInput, setTickerInput] = useState('');
-  const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
-  const { refreshTrigger } = useGlobalRefresh();
-  
-  const [showImporter, setShowImporter] = useState(false);
-  const [isEditingName, setIsEditingName] = useState(false);
-  const [editNameValue, setEditNameValue] = useState('');
+  const [heroData, setHeroData] = useState<WatchlistItem | null>(null);
+  const [loadingHero, setLoadingHero] = useState(false);
+  const { loadStock } = useStockAnalysis();
 
-  const activeWatchlist = watchlists.find(w => w.id === activeWatchlistId) || watchlists[0];
-
-  const updateQuotes = async (tickers: string[]) => {
-    if (!tickers || tickers.length === 0) {
-      setItems([]);
-      return;
-    }
-    setLoading(true);
+  // Fetch Hero Data when ticker changes
+  const loadHeroData = async (ticker: string) => {
+    if (!ticker) return;
+    setLoadingHero(true);
     try {
-      const data = await fetchWatchlistQuotes(tickers);
-      setItems(data || []);
+      // Trigger global context load
+      loadStock(ticker);
+      
+      // Fetch local hero stats
+      const data = await fetchWatchlistQuotes([ticker]);
+      if (data && data.length > 0) {
+        setHeroData(data[0]);
+      } else {
+        setHeroData(null);
+      }
     } catch (e) {
-      console.error(e);
-      setItems([]);
+      console.error("Failed to load hero data", e);
     } finally {
-      setLoading(false);
+      setLoadingHero(false);
     }
   };
 
   useEffect(() => {
-    if (activeWatchlist && activeWatchlist.tickers.length > 0) {
-      updateQuotes(activeWatchlist.tickers);
-    } else {
-      setItems([]);
+    if (currentTicker) {
+      loadHeroData(currentTicker);
     }
-  }, [activeWatchlistId, watchlists]); 
+  }, [currentTicker]);
 
-  useEffect(() => {
-     if (refreshTrigger > 0 && activeWatchlist && activeWatchlist.tickers.length > 0) {
-        updateQuotes(activeWatchlist.tickers);
-     }
-  }, [refreshTrigger]);
-
-  const handleAddTicker = async (e: React.FormEvent) => {
+  const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanTicker = tickerInput.trim().toUpperCase();
-    if (!cleanTicker) return;
-    
-    if (activeWatchlist.tickers.includes(cleanTicker)) {
+    const clean = tickerInput.trim().toUpperCase();
+    if (clean) {
+      onTickerChange(clean);
       setTickerInput('');
-      return;
-    }
-
-    const updatedList = { ...activeWatchlist, tickers: [...activeWatchlist.tickers, cleanTicker] };
-    const updatedWatchlists = watchlists.map(w => w.id === activeWatchlistId ? updatedList : w);
-    
-    setWatchlists(updatedWatchlists);
-    setTickerInput('');
-    await updateQuotes(updatedList.tickers);
-  };
-
-  const handleRemoveTicker = (e: React.MouseEvent, ticker: string) => {
-    e.stopPropagation();
-    const updatedTickers = activeWatchlist.tickers.filter(t => t !== ticker);
-    const updatedList = { ...activeWatchlist, tickers: updatedTickers };
-    const updatedWatchlists = watchlists.map(w => w.id === activeWatchlistId ? updatedList : w);
-    
-    setWatchlists(updatedWatchlists);
-    setItems(prev => prev.filter(i => i.symbol !== ticker));
-  };
-
-  const createNewWatchlist = () => {
-    const newId = Date.now().toString();
-    const newList: Watchlist = { id: newId, name: 'New Watchlist', tickers: [] };
-    setWatchlists([...watchlists, newList]);
-    setActiveWatchlistId(newId);
-  };
-
-  const deleteActiveWatchlist = () => {
-    if (watchlists.length <= 1) {
-      alert("You must keep at least one watchlist.");
-      return;
-    }
-    if (confirm(`Are you sure you want to delete "${activeWatchlist.name}"?`)) {
-       const remaining = watchlists.filter(w => w.id !== activeWatchlistId);
-       setWatchlists(remaining);
-       setActiveWatchlistId(remaining[0].id);
     }
   };
 
-  const startRename = () => {
-    setEditNameValue(activeWatchlist.name);
-    setIsEditingName(true);
-  };
-
-  const saveRename = () => {
-    if (editNameValue.trim()) {
-      const updatedList = { ...activeWatchlist, name: editNameValue.trim() };
-      const updatedWatchlists = watchlists.map(w => w.id === activeWatchlistId ? updatedList : w);
-      setWatchlists(updatedWatchlists);
-    }
-    setIsEditingName(false);
-  };
-
-  const handleImport = (tickers: string[], listName: string) => {
-    const newId = Date.now().toString();
-    const newList: Watchlist = { id: newId, name: listName, tickers: tickers };
-    setWatchlists([...watchlists, newList]);
-    setActiveWatchlistId(newId);
-    setShowImporter(false);
-  };
-
-  // Helper Mappers with safeguards
+  // Helper Mappers
   const getInsightIcon = (insight?: string) => {
     switch(insight?.toLowerCase()) {
-      case 'bullish': return { icon: '🟢', text: 'Uptrend intact — bullish structure' };
-      case 'bearish': return { icon: '🔴', text: 'Downtrend break — bearish structure' };
-      case 'neutral': return { icon: '🟡', text: 'Trendline retest — neutral zone' };
-      case 'volatile': return { icon: '🟣', text: 'High volatility — expect fast moves' };
-      default: return { icon: '⚪', text: 'Analyzing structure...' };
+      case 'bullish': return { icon: '🟢', tooltip: 'Uptrend intact — bullish structure' };
+      case 'bearish': return { icon: '🔴', tooltip: 'Downtrend break — bearish structure' };
+      case 'neutral': return { icon: '🟡', tooltip: 'Trendline retest — neutral zone' };
+      case 'volatile': return { icon: '🟣', tooltip: 'High volatility — expect fast moves' };
+      default: return { icon: '⚪', tooltip: 'Analyzing structure...' };
     }
   };
 
   const getChartIcon = (chart?: string) => {
     switch(chart?.toLowerCase()) {
-      case 'uptrend': return { icon: '📈', text: 'Mini chart: short-term uptrend' };
-      case 'downtrend': return { icon: '📉', text: 'Mini chart: short-term downtrend' };
-      default: return { icon: '📊', text: 'Mini chart: sideways consolidation' };
+      case 'uptrend': return { icon: '📈', tooltip: 'Mini chart: short-term uptrend' };
+      case 'downtrend': return { icon: '📉', tooltip: 'Mini chart: short-term downtrend' };
+      default: return { icon: '📊', tooltip: 'Mini chart: sideways consolidation' };
     }
   };
 
   const getVolIcon = (vol?: string) => {
     switch(vol?.toLowerCase()) {
-      case 'low': return { icon: '⚪', text: 'Low volatility — stable movement' };
-      case 'medium': return { icon: '🔵', text: 'Medium volatility — moderate swings' };
-      case 'high': return { icon: '🟣', text: 'High volatility — increased risk' };
-      default: return { icon: '⚪', text: 'Volatility unknown' };
+      case 'low': return { icon: '⚪', tooltip: 'Low volatility — stable movement' };
+      case 'medium': return { icon: '🔵', tooltip: 'Medium volatility — moderate swings' };
+      case 'high': return { icon: '🟣', tooltip: 'High volatility — increased risk' };
+      default: return { icon: '⚪', tooltip: 'Volatility unknown' };
     }
   };
 
   const getNewsIcon = (status?: string) => {
     switch(status?.toLowerCase()) {
-      case 'positive': return { icon: '🔥', text: 'Positive news / strong catalyst detected' };
-      case 'negative': return { icon: '⚠️', text: 'Negative or risky news event' };
-      case 'neutral': return { icon: '📰', text: 'Official press release available' };
-      default: return { icon: <span className="opacity-20">📰</span>, text: 'No recent news' };
+      case 'positive': return { icon: '🔥', tooltip: 'Positive news / strong catalyst detected' };
+      case 'negative': return { icon: '⚠️', tooltip: 'Negative or risky news event' };
+      case 'neutral': return { icon: '📰', tooltip: 'Official press release available' };
+      default: return { icon: <span className="opacity-20">📰</span>, tooltip: 'No recent news' };
     }
   };
 
   const getSRIndicator = (status?: string) => {
-    if (status?.toLowerCase() === 'resistance') return { text: 'RS↑', tooltip: 'Price approaching resistance', color: 'text-red-400' };
-    if (status?.toLowerCase() === 'support') return { text: 'RS↓', tooltip: 'Price approaching support', color: 'text-green-400' };
-    return { text: '---', tooltip: 'Not near key levels', color: 'text-gray-600' };
+    if (status?.toLowerCase() === 'resistance') return { text: 'RS↑', tooltip: 'Price approaching resistance', color: 'text-red-400 border-red-500/30' };
+    if (status?.toLowerCase() === 'support') return { text: 'RS↓', tooltip: 'Price approaching support', color: 'text-green-400 border-green-500/30' };
+    return { text: '---', tooltip: 'Not near key levels', color: 'text-gray-600 border-gray-700' };
   };
 
+  // --- Render ---
+
   return (
-    <div className="max-w-full mx-auto animate-fade-in relative min-h-[80vh] px-4 md:px-8 pb-20"> 
-      {/* Header Section */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-gray-800 pb-4">
-        <div>
-          <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center gap-2">
-             Multi-Watchlist <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-400">Manager</span>
-          </h1>
-          <p className="text-gray-400 mt-1 text-sm">
-            Organize your portfolio. Import tickers directly from platform screenshots.
-          </p>
-        </div>
+    <div className="max-w-6xl mx-auto animate-fade-in pb-20">
+      
+      {/* Header & Search */}
+      <div className="mb-8 text-center">
+        <h1 className="text-4xl font-extrabold text-white tracking-tight mb-2">
+           Stock <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-400">Analysis</span>
+        </h1>
+        <p className="text-gray-400 mb-6">Deep dive technicals, trend analysis, and institutional flow for a single ticker.</p>
         
-        <button 
-          onClick={() => setShowImporter(true)}
-          className="flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white px-5 py-2 rounded-lg font-bold shadow-lg shadow-blue-900/30 transition-all transform hover:scale-105"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-            <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
-          </svg>
-          Import from Screenshot
-        </button>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex flex-col md:flex-row gap-4 mb-6 bg-gray-900/50 p-2 rounded-xl border border-gray-800">
-         <div className="flex flex-1 gap-2 overflow-x-auto scrollbar-hide">
-            {watchlists.map(list => (
-               <button
-                 key={list.id}
-                 onClick={() => setActiveWatchlistId(list.id)}
-                 className={`whitespace-nowrap px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                    activeWatchlistId === list.id 
-                    ? 'bg-blue-600 text-white shadow-md' 
-                    : 'text-gray-400 hover:bg-gray-800 hover:text-white'
-                 }`}
-               >
-                 {list.name}
-               </button>
-            ))}
-            <button 
-              onClick={createNewWatchlist}
-              className="px-3 py-2 text-gray-500 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
-              title="Create New List"
-            >
-              +
-            </button>
-         </div>
-      </div>
-
-      {/* List Controls */}
-      <div className="flex flex-col md:flex-row justify-between items-end gap-6 mb-6">
-         <div className="flex items-center gap-3 w-full md:w-auto">
-            {isEditingName ? (
-              <div className="flex gap-2">
-                 <input 
-                   type="text" 
-                   value={editNameValue} 
-                   onChange={(e) => setEditNameValue(e.target.value)}
-                   className="bg-gray-800 border border-gray-700 text-white px-3 py-1 rounded focus:outline-none focus:border-blue-500"
-                   autoFocus
-                 />
-                 <button onClick={saveRename} className="text-green-400 hover:text-green-300">Save</button>
-                 <button onClick={() => setIsEditingName(false)} className="text-gray-500 hover:text-gray-300">Cancel</button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 group">
-                 <h2 className="text-xl font-bold text-white">{activeWatchlist?.name}</h2>
-                 <button onClick={startRename} className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-500 hover:text-blue-400 p-1">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                       <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-                    </svg>
-                 </button>
-              </div>
-            )}
-            
-            <div className="w-px h-6 bg-gray-700 mx-2"></div>
-            
-            <button 
-              onClick={deleteActiveWatchlist}
-              className="text-xs text-red-400 hover:text-red-300 hover:bg-red-900/20 px-2 py-1 rounded transition-colors"
-            >
-              Delete List
-            </button>
-         </div>
-
-         <form onSubmit={handleAddTicker} className="flex gap-2 w-full md:w-auto">
+        <form onSubmit={handleSearch} className="max-w-md mx-auto relative">
           <input 
             type="text" 
             value={tickerInput}
             onChange={(e) => setTickerInput(e.target.value)}
-            placeholder="ADD TICKER" 
-            className="bg-gray-800 border border-gray-700 text-white px-4 py-2 rounded-lg focus:outline-none focus:border-blue-500 w-full md:w-48 uppercase font-mono text-sm"
+            placeholder="Enter Ticker (e.g. AAPL)"
+            className="w-full bg-gray-900 border border-gray-700 text-white pl-5 pr-12 py-4 rounded-full focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-900 shadow-xl text-lg font-mono uppercase"
           />
           <button 
-            type="submit"
-            className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg font-bold text-sm transition-colors"
+            type="submit" 
+            className="absolute right-2 top-2 bottom-2 bg-blue-600 hover:bg-blue-500 text-white rounded-full w-10 flex items-center justify-center transition-colors"
           >
-            + ADD
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
           </button>
         </form>
       </div>
 
-      {loading && items.length === 0 && (
-         <div className="flex justify-center py-20">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+      {/* Content Area */}
+      {!currentTicker ? (
+         <div className="flex flex-col items-center justify-center py-20 text-gray-600 bg-gray-900/30 rounded-3xl border border-gray-800 border-dashed">
+            <div className="w-20 h-20 rounded-full bg-gray-800 flex items-center justify-center mb-4">
+               <span className="text-4xl opacity-50">🔍</span>
+            </div>
+            <p className="text-xl font-medium">Search a ticker to begin analysis</p>
          </div>
-      )}
+      ) : (
+         <div className="space-y-8 animate-fade-in-up">
+            
+            {/* Hero Data Card */}
+            {heroData && (
+               <div className="bg-gray-900 border border-gray-700 rounded-3xl p-6 md:p-8 shadow-2xl relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/10 rounded-full blur-[80px] pointer-events-none"></div>
+                  
+                  <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                     <div className="flex items-center gap-4">
+                        <div className="w-16 h-16 rounded-2xl bg-white p-2 flex items-center justify-center shadow-lg">
+                           <img 
+                              src={`https://assets.parqet.com/logos/symbol/${heroData.symbol}?format=png`} 
+                              alt={heroData.symbol} 
+                              className="w-full h-full object-contain"
+                              onError={(e) => {
+                                 e.currentTarget.style.display = 'none';
+                                 e.currentTarget.parentElement!.style.backgroundColor = '#1f2937';
+                                 const safeSymbol = heroData.symbol || '?';
+                                 e.currentTarget.parentElement!.innerHTML = `<span class="text-2xl font-bold text-white">${safeSymbol[0]}</span>`
+                              }}
+                           />
+                        </div>
+                        <div>
+                           <h2 className="text-4xl font-bold text-white font-mono tracking-tight">{heroData.symbol}</h2>
+                           <p className="text-gray-400 text-sm font-medium">{heroData.companyName || 'US Stock'}</p>
+                        </div>
+                     </div>
 
-      {!loading && items.length === 0 && activeWatchlist?.tickers.length === 0 && (
-        <div className="text-center py-20 bg-gray-900/50 rounded-xl border border-gray-800 border-dashed">
-           <p className="text-gray-400">This watchlist is empty.</p>
-           <p className="text-sm text-gray-600 mt-1">Add a ticker manually or import a screenshot.</p>
-        </div>
-      )}
+                     <div className="text-right">
+                        <div className="text-4xl font-mono font-bold text-white">{heroData.price}</div>
+                        <div className={`text-lg font-bold ${String(heroData.changePercent).includes('-') ? 'text-red-400' : 'text-green-400'}`}>
+                           {heroData.changePercent}
+                        </div>
+                     </div>
+                  </div>
 
-      <div className="space-y-2 overflow-x-auto pb-20">
-        <div className="min-w-[900px] border-t border-gray-800">
-            {/* Table Header */}
-            {items.length > 0 && (
-               <div className="flex items-center justify-between bg-gray-900/90 border-b border-gray-800 py-3 px-4 text-[10px] md:text-xs font-bold text-gray-500 uppercase tracking-wider select-none sticky top-0 backdrop-blur-sm z-20">
-                   <div className="w-40 shrink-0">Symbol</div>
-                   <div className="w-36 shrink-0 px-2">Price</div>
-                   <div className="w-24 shrink-0 text-center px-2">Volume</div>
-                   <div className="w-16 shrink-0 text-center">Trend</div>
-                   <div className="w-16 shrink-0 text-center">Tech</div>
-                   <div className="w-16 shrink-0 text-center">Vol</div>
-                   <div className="w-16 shrink-0 text-center">News</div>
-                   <div className="w-20 shrink-0 text-center">Levels</div>
-                   <div className="ml-auto pl-4 w-9"></div>
+                  <div className="grid grid-cols-3 md:grid-cols-6 gap-4 mt-8 pt-6 border-t border-gray-800">
+                     <div className="text-center">
+                        <span className="block text-gray-500 text-xs uppercase mb-1">RVOL</span>
+                        <span className="text-white font-mono font-bold text-lg">{heroData.relativeVolume && heroData.relativeVolume !== 'x' ? `${heroData.relativeVolume}x` : 'N/A'}</span>
+                     </div>
+                     <div className="text-center flex flex-col items-center">
+                        <span className="block text-gray-500 text-xs uppercase mb-1">Trend</span>
+                        <TooltipIcon {...getChartIcon(heroData.miniChart)} colorClass="text-blue-400" />
+                     </div>
+                     <div className="text-center flex flex-col items-center">
+                        <span className="block text-gray-500 text-xs uppercase mb-1">Structure</span>
+                        <TooltipIcon {...getInsightIcon(heroData.insight)} />
+                     </div>
+                     <div className="text-center flex flex-col items-center">
+                        <span className="block text-gray-500 text-xs uppercase mb-1">Volatility</span>
+                        <TooltipIcon {...getVolIcon(heroData.volatilityType)} />
+                     </div>
+                     <div className="text-center flex flex-col items-center">
+                        <span className="block text-gray-500 text-xs uppercase mb-1">News</span>
+                        <TooltipIcon {...getNewsIcon(heroData.newsStatus)} />
+                     </div>
+                     <div className="text-center">
+                        <span className="block text-gray-500 text-xs uppercase mb-1">Key Level</span>
+                        <div className={`text-sm font-bold px-2 py-1 rounded inline-block border ${getSRIndicator(heroData.srStatus).color} bg-gray-800`}>
+                           {getSRIndicator(heroData.srStatus).text}
+                        </div>
+                     </div>
+                  </div>
                </div>
             )}
 
-            {items.map((item) => {
-            const isPos = item.changePercent?.includes('-') === false;
-            const logoUrl = `https://assets.parqet.com/logos/symbol/${item.symbol}?format=png`;
-            
-            const insight = getInsightIcon(item.insight);
-            const chart = getChartIcon(item.miniChart);
-            const vol = getVolIcon(item.volatilityType);
-            const news = getNewsIcon(item.newsStatus);
-            const sr = getSRIndicator(item.srStatus);
+            {/* Loading Hero State */}
+            {loadingHero && !heroData && (
+               <div className="h-48 bg-gray-900 rounded-3xl animate-pulse"></div>
+            )}
 
-            return (
-                <div 
-                  key={item.symbol} 
-                  onClick={() => setSelectedTicker(item.symbol)}
-                  className="group/row flex items-center justify-between bg-gray-900/40 hover:bg-gray-800 border-b border-gray-800 hover:border-blue-500/30 py-4 px-4 cursor-pointer transition-all duration-200"
-                >
-                    {/* Logo & Ticker */}
-                    <div className="flex items-center gap-3 w-40 shrink-0 group/logo relative">
-                        <div className="w-8 h-8 rounded-full bg-white flex-shrink-0 overflow-hidden flex items-center justify-center p-0.5 shadow-sm">
-                            <img 
-                                src={logoUrl} 
-                                alt={item.symbol}
-                                className="w-full h-full object-contain"
-                                onError={(e) => {
-                                  e.currentTarget.style.display = 'none';
-                                  e.currentTarget.parentElement!.style.backgroundColor = '#374151'; 
-                                  e.currentTarget.parentElement!.innerHTML = `<span class="text-[10px] font-bold text-white">${item.symbol[0]}</span>`;
-                                }}
-                            />
-                        </div>
-                        <span className="text-lg font-bold text-white tracking-wide font-mono">{item.symbol}</span>
-                    </div>
+            {/* Embedded Analysis View */}
+            <div className="mt-8">
+               <StockDetailView ticker={currentTicker} isEmbedded={true} />
+            </div>
 
-                    <div className="flex items-center gap-2 w-36 shrink-0 justify-start px-2">
-                        <span className="text-white font-mono font-medium">{item.price || '---'}</span>
-                        <span className={`font-mono font-bold text-sm ${isPos ? 'text-green-400' : 'text-red-400'}`}>
-                            {item.changePercent || '---'}
-                        </span>
-                    </div>
-
-                    <div className="w-24 shrink-0 text-center px-2">
-                         <span className="block text-gray-300 font-mono text-sm">{item.relativeVolume || '-'}x</span>
-                    </div>
-
-                    <div className="w-16 shrink-0 text-center">
-                        <TooltipIcon icon={chart.icon} tooltip={chart.text} colorClass="text-blue-300" />
-                    </div>
-
-                    <div className="w-16 shrink-0 text-center">
-                        <TooltipIcon icon={insight.icon} tooltip={insight.text} />
-                    </div>
-
-                    <div className="w-16 shrink-0 text-center">
-                        <TooltipIcon icon={vol.icon} tooltip={vol.text} />
-                    </div>
-
-                    <div className="w-16 shrink-0 text-center">
-                        <TooltipIcon icon={news.icon} tooltip={news.text} />
-                    </div>
-
-                    <div className="w-20 shrink-0 text-center flex justify-center">
-                        <div className={`text-xs font-bold px-2 py-1 rounded border border-gray-700 bg-gray-800 ${sr.color}`} title={sr.tooltip}>
-                            {sr.text}
-                        </div>
-                    </div>
-
-                    <div className="ml-auto pl-4 w-9 flex justify-center opacity-0 group-hover/row:opacity-100 transition-opacity">
-                         <button 
-                            onClick={(e) => handleRemoveTicker(e, item.symbol)}
-                            className="text-gray-600 hover:text-red-500 hover:bg-red-900/20 p-1.5 rounded-full transition-all"
-                         >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                         </button>
-                    </div>
-                </div>
-              );
-            })}
-        </div>
-      </div>
-
-      {selectedTicker && (
-         <StockDetailView ticker={selectedTicker} onClose={() => setSelectedTicker(null)} />
-      )}
-
-      {showImporter && (
-         <ScreenshotImporter 
-            onImport={handleImport} 
-            onCancel={() => setShowImporter(false)} 
-         />
+         </div>
       )}
     </div>
   );
